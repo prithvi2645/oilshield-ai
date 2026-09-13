@@ -48,12 +48,11 @@ def generate_docx():
     doc.add_paragraph().paragraph_format.space_after = Pt(12)
 
     # Meta Table
-    meta_table = doc.add_table(rows=4, cols=2)
+    meta_table = doc.add_table(rows=3, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
         ("Target Organization", "Oil India Limited (HSSE Department)"),
-        ("Project Status", "Fully Implemented, Verified, & Pushed to Private GitHub Repository"),
-        ("Private Repository", "https://github.com/prithvi2645/sih-hsse-platform"),
+        ("Project Status", "Fully Implemented & Verified Baseline Platform"),
         ("Operational Coverage", "12+ Oil India Installations (Baghjan, Duliajan, Digboi, Moran)")
     ]
     for i, (k, v) in enumerate(meta_data):
@@ -313,8 +312,7 @@ def generate_pdf():
     # Meta table
     meta_data = [
         [Paragraph("<b>Target Organization</b>", body_style), Paragraph("Oil India Limited (HSSE Department)", body_style)],
-        [Paragraph("<b>Project Status</b>", body_style), Paragraph("Fully Implemented, Verified, & Pushed to Private GitHub Repository", body_style)],
-        [Paragraph("<b>Private Repository</b>", body_style), Paragraph("https://github.com/prithvi2645/sih-hsse-platform", body_style)],
+        [Paragraph("<b>Project Status</b>", body_style), Paragraph("Fully Implemented & Verified Baseline Platform", body_style)],
         [Paragraph("<b>Operational Coverage</b>", body_style), Paragraph("12+ Oil India Installations (Baghjan, Duliajan, Digboi, Moran)", body_style)]
     ]
     t_meta = Table(meta_data, colWidths=[140, 360])
@@ -398,12 +396,6 @@ def generate_pdf():
         ('BOTTOMPADDING', (0,0), (-1,-1), 4),
     ]))
     story.append(t_api)
-
-    story.append(Spacer(1, 10))
-    story.append(Paragraph("4. Private GitHub Repository & Team Setup", h2_style))
-    story.append(Paragraph("• <b>Repository:</b> Private repository at https://github.com/prithvi2645/sih-hsse-platform", bullet_style))
-    story.append(Paragraph("• <b>Collaboration:</b> Teammates invited via GitHub Collaborators with write permissions.", bullet_style))
-    story.append(Paragraph("• <b>Branching:</b> Feature branch pattern (feature/<name>) with PR reviews. Safe push flag --force-with-lease enforced.", bullet_style))
 
     doc.build(story)
     print(f"[SUCCESS] PDF generated: {pdf_path}")

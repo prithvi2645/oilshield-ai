@@ -176,39 +176,6 @@ python src/evaluate_experiments.py
 
 ---
 
-## Team Collaboration & Git Best Practices
-
-To maintain a clean, authentic team contribution history:
-
-1. **Local Git Identity Configuration**:
-   Each teammate must set their Git name and verified GitHub email before committing:
-   ```bash
-   git config user.name "Your Full Name"
-   git config user.email "your-github-email@example.com"
-   ```
-
-2. **Feature Branching**:
-   Never commit directly to `main`. Create feature branches for new work:
-   ```bash
-   git checkout main
-   git pull origin main
-   git checkout -b feature/your-feature-name
-   ```
-
-3. **Submitting Changes**:
-   Push feature branch and open a Pull Request (PR) on GitHub:
-   ```bash
-   git add .
-   git commit -m "feat: add real-time barrier condition tracker"
-   git push -u origin feature/your-feature-name
-   ```
-
-4. **Destructive Command Warning**:
-   - Avoid `git reset --hard` (deletes local uncommitted work). Use `git stash` or `git revert`.
-   - Avoid `git push --force`. Use `git push --force-with-lease` to prevent overwriting teammates' remote commits.
-
----
-
 ## Regulatory Standards Reference
 
 - **OISD-STD-105**: Work Permit System for Oil & Gas Industry Safety.
