@@ -9,7 +9,7 @@
 
 In upstream oil and gas operations—spanning drilling rigs, gas gathering stations, refineries, and high-pressure cross-country pipelines—traditional safety tracking often struggles to separate high-consequence **Serious Injury & Fatality (SIF)** precursors from routine low-severity observations.
 
-This platform provides an end-to-end artificial intelligence and data-driven triage solution developed for **Oil India Limited (HSSE Department)**. It automatically ingests field safety reports (in English, Hindi, Hinglish, or Assamese regional terms), evaluates energy pathway hazards, checks safety barrier health, flags IOGP Life-Saving Rule violations, builds interactive safety knowledge graphs, and forecasts temporal risk trends across 12+ Oil India operational installations.
+This platform provides an end-to-end artificial intelligence and data-driven triage solution developed for **Oil India Limited (HSSE Department)**. Built with a zero-external-framework Python server and offline-first ML models, it automatically ingests field safety reports (in English, Hindi, Hinglish, or Assamese regional terms), evaluates energy pathway hazards, checks safety barrier health, flags IOGP Life-Saving Rule violations, builds interactive safety knowledge graphs, and forecasts temporal risk trends across 12+ Oil India operational installations.
 
 ---
 
@@ -18,8 +18,8 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 ### 1. 🤖 AI Incident Classifier & SIF Precursor Triage
 - **NLP Vectorization**: Utilizes TF-IDF subword and domain-specific n-gram tokenization tuned specifically for oilfield terminology (e.g., *BOP, flare stack, wellhead pressure, H2S sensor, hot work, wireline*).
 - **Dual Machine Learning Engine**:
-  - **SIF Precursor Detector**: Identifies uncontrolled high-energy release pathways and barrier breaches.
-  - **IOGP Life-Saving Rule Classifier**: Predicts the exact implicated Life-Saving Rule out of the 10 core IOGP rules.
+  - **SIF Precursor Detector**: Binary classification model identifying uncontrolled high-energy release pathways and barrier breaches.
+  - **IOGP Life-Saving Rule Classifier**: Multi-class model predicting the exact implicated Life-Saving Rule out of the 10 core IOGP rules.
 - **Risk Score & Audit Rationale**: Calculates a numeric SIF risk index (0–100%) and generates an automated audit rationale with OISD action recommendations.
 
 ### 2. 🕸️ Safety Relationship Map (D3.js Knowledge Graph)
@@ -59,14 +59,31 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
   - **Digboi Refinery Area** (Refining & Processing)
   - **Moran OCS Station** (Oil Collecting Stations & Manifolds)
 
+### 9. 📊 UTF-8 Excel-Compatible Data Export
+- One-click CSV export endpoint `/api/export` with embedded UTF-8 Byte Order Mark (`\xef\xbb\xbf`), allowing Microsoft Excel on Windows to natively open exported safety reports with proper column formatting.
+
 ---
 
-## 🛠️ Technology Stack
+## ⚡ REST API Endpoints (`app/server.py`)
 
-- **Backend**: Python 3.9+, Flask (REST API), Scikit-Learn, NumPy, Pandas, Joblib.
-- **Frontend**: HTML5, Vanilla CSS3 (Custom Design System with Design Tokens & Modern Dark/Light Theme), Vanilla JavaScript (ES6+).
-- **Visualization Libraries**: D3.js v7 (Force-directed Graph Topology), Chart.js v4 (Analytics & Donuts).
-- **Machine Learning**: TF-IDF Vectorization, Logistic Regression, Multi-class Classification, Cosine Similarity.
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | `GET` | Serves main Single-Page Application (`public/index.html`) |
+| `/api/classify` | `POST` | Ingests incident text, runs ML inference, returns SIF risk, IOGP rule, rationale & hierarchy of controls |
+| `/api/similar` | `POST` | Ingests incident text, performs TF-IDF cosine similarity search, returns top 3 historical near-misses |
+| `/api/analytics` | `GET` | Returns summary KPIs, hazard distributions, monthly trend arrays, and polyfit 60-day risk forecasts |
+| `/api/knowledge-graph` | `GET` | Returns extracted graph nodes (Activities, Hazards, Barriers, Rules, Consequences) and link edges |
+| `/api/reports` | `GET` | Serves safety report records from `data/oil_safety_reports.csv` |
+| `/api/export` | `GET` | Serves UTF-8 BOM encoded CSV download for Microsoft Excel compatibility |
+
+---
+
+## 🛠️ Technology Stack & Dependencies
+
+- **Backend / HTTP Server**: Python 3.9+ native `http.server.HTTPServer` (zero external web framework overhead).
+- **Machine Learning & NLP**: Scikit-Learn (Logistic Regression, TF-IDF Vectorizer), NumPy, Pandas, Joblib.
+- **Frontend UI**: HTML5, Vanilla CSS3 (Custom Design Tokens system & responsive layouts), Vanilla JavaScript (ES6+ async/await architecture).
+- **Data Visualizations**: D3.js v7 (Interactive force-directed graph), Chart.js v4 (KPI distribution & trend charts).
 - **Version Control & CI**: Git, GitHub (Private Repository), GitHub CLI (`gh`).
 
 ---
@@ -76,32 +93,34 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 ```
 sih-hsse-platform/
 ├── app/
-│   └── server.py                  # Flask HTTP web server & REST API endpoints
+│   └── server.py                  # HTTP server & REST API handlers (native http.server)
 ├── data/
-│   ├── oil_safety_reports.csv     # Synthetic & curated Oil India safety observations
-│   ├── osha_oil_sif_train.csv     # Training dataset for SIF precursor classifier
-│   ├── osha_oil_sif_test.csv      # Testing & validation dataset
-│   └── severe_injury_reports.csv  # High-consequence severe injury baseline data
+│   ├── oil_safety_reports.csv     # Primary dataset of 500+ Oil India safety observations
+│   ├── osha_oil_sif_train.csv     # SIF precursor ML training set (OSHA & domain data)
+│   ├── osha_oil_sif_test.csv      # SIF precursor ML testing & validation set
+│   ├── osha_oil_sif_processor.py  # OSHA & oilfield data ingestion processor
+│   └── severe_injury_reports.csv  # Severe injury baseline dataset
 ├── models/
-│   ├── sif_classifier.pkl         # Trained Binary SIF Precursor Model
-│   ├── lsr_classifier.pkl         # Trained Multi-class IOGP Rule Classifier
-│   └── tfidf_vectorizer.pkl       # Domain-fitted TF-IDF Vectorizer
+│   ├── sif_classifier.pkl         # Trained Binary SIF Precursor Classification Model
+│   ├── lsr_classifier.pkl         # Trained Multi-class IOGP Life-Saving Rule Model
+│   └── tfidf_vectorizer.pkl       # Fitted subword & n-gram TF-IDF Vectorizer
 ├── public/
-│   ├── index.html                 # Main Enterprise Single-Page Application (SPA)
-│   ├── styles.css                 # Custom CSS Design System & Responsive Layouts
-│   ├── app.js                     # Frontend Application Logic, API integration & D3 Graph
-│   ├── data/                      # Client-accessible static CSV datasets
-│   └── images/                    # Industrial installation imagery & hero assets
+│   ├── index.html                 # Single-Page Application HTML layout
+│   ├── styles.css                 # Enterprise CSS design system & responsive rules
+│   ├── app.js                     # Frontend state manager, API caller & D3 graph renderer
+│   ├── data/                      # Client-accessible static dataset copies
+│   └── images/                    # Installation photos (Baghjan, Duliajan, Digboi, Moran)
 ├── src/
-│   ├── sif_engine.py              # SIF calculation & risk scoring core logic
-│   ├── nlp_engine.py              # Text pre-processing & Hinglish normalization
-│   ├── domain_tokenizer.py        # Oilfield domain vocabulary & tokenization
-│   ├── iogp_matcher.py            # Rule matching against 10 IOGP Life-Saving Rules
-│   ├── train.py                   # Model training and serialization script
-│   ├── evaluate_experiments.py    # Metric evaluation & accuracy reporting
-│   └── hyperparameter_tuning.py   # Grid search & model optimization pipeline
-├── .gitignore                     # Git ignore rules for Python/Web artifacts
-└── README.md                      # Comprehensive project documentation
+│   ├── sif_engine.py              # SIF precursor evaluation & numeric risk scoring
+│   ├── nlp_engine.py              # SafetyClassifierPipeline wrapper & text normalizer
+│   ├── domain_tokenizer.py        # Oilfield domain vocabulary & Hinglish tokenizer
+│   ├── iogp_matcher.py            # Rule matcher against 10 IOGP Life-Saving Rules
+│   ├── train.py                   # Model training & joblib serialization pipeline
+│   ├── evaluate_experiments.py    # Metric evaluation (Precision, Recall, F1, Confusion Matrix)
+│   └── hyperparameter_tuning.py   # Grid search & C-parameter optimization script
+├── sif_engine.py                  # Root-level entry point module for SIF calculations
+├── .gitignore                     # Git ignore file for bytecode, logs, and venvs
+└── README.md                      # Complete enterprise documentation
 ```
 
 ---
@@ -112,7 +131,7 @@ sih-hsse-platform/
 Ensure you have the following installed on your machine:
 - **Python 3.9+**
 - **Git**
-- Modern web browser (Chrome, Edge, Firefox, Safari)
+- Modern Web Browser (Chrome, Edge, Firefox, Safari)
 
 ### 2. Clone the Repository
 ```bash
@@ -120,22 +139,39 @@ git clone https://github.com/prithvi2645/sih-hsse-platform.git
 cd sih-hsse-platform
 ```
 
-### 3. Install Python Dependencies
+### 3. Install Python ML Dependencies
 ```bash
-python -m pip install flask scikit-learn numpy pandas joblib
+python -m pip install scikit-learn numpy pandas joblib
 ```
 
-### 4. Launch the Application Server
-Run the Flask server script:
+### 4. Launch the Server
+Start the backend HTTP server:
 ```bash
 python app/server.py
 ```
-*(The server will initialize pre-computed analytics, load ML models from `models/`, and start serving on `http://localhost:8080`)*
+*(The server will initialize pre-computed TF-IDF matrices, load ML artifacts from `models/`, and start listening on `http://localhost:8080`)*
 
-### 5. Access the Web Dashboard
+### 5. Access the Platform
 Open your browser and navigate to:
 ```
 http://localhost:8080
+```
+
+---
+
+## 🧪 Model Retraining & Evaluation
+
+If you wish to retrain the ML models or evaluate model metrics locally:
+
+```bash
+# 1. Retrain SIF and IOGP classifiers
+python src/train.py
+
+# 2. Run hyperparameter tuning (Grid search over C values & n-grams)
+python src/hyperparameter_tuning.py
+
+# 3. Evaluate model performance & generate metrics
+python src/evaluate_experiments.py
 ```
 
 ---
