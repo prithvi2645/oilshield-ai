@@ -106,7 +106,7 @@ sih-hsse-platform/
 
 ---
 
-## 🚀 Installation & Local Running Guide
+ Installation & Local Running Guide
 
 ### 1. Prerequisites
 Ensure you have the following installed on your machine:
