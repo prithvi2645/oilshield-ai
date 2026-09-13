@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Oil India Limited HSSE – Serious Injury & Fatality (SIF) Precursor Management System. Incident classification, site risk analysis, and OISD/IOGP compliance reporting.">
+    <title>Oil India Limited — HSSE SIF Management System</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Chart.js & D3.js v7 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         ROLE-BASED ACCESS CONTROL MODAL (RBAC)
+    ============================================================ -->
+    <div class="role-modal-overlay" id="roleModalOverlay">
+        <div class="role-modal">
+            <div class="role-modal-header">
+                <div class="oil-emblem" style="margin: 0 auto 12px; width: 44px; height: 44px; font-size: 16px;">OIL</div>
+                <h3>Select Access Role</h3>
+                <p>Enterprise Role-Based Access Control (RBAC) Scoping Layer</p>
+            </div>
+            <div class="role-options-grid">
+                <button class="role-card-btn active" data-role="hse_manager">
+                    <div class="role-title">HSE Manager</div>
+                    <div class="role-desc">Full enterprise access: Overview, Dashboard, Classifier, Site Risk, Compliance, Reports &amp; Knowledge Graph</div>
+                </button>
+                <button class="role-card-btn" data-role="site_manager">
+                    <div class="role-title">Site Manager</div>
+                    <div class="role-desc">Operational scope: Overview, Dashboard, Classifier, Reports (Knowledge Graph restricted)</div>
+                </button>
+                <button class="role-card-btn" data-role="supervisor">
+                    <div class="role-title">Field Supervisor</div>
+                    <div class="role-desc">Field scope: Incident Classifier &amp; Reports Database</div>
+                </button>
+                <button class="role-card-btn" data-role="analyst">
+                    <div class="role-title">Safety Analyst</div>
+                    <div class="role-desc">Read-only scope: Overview &amp; Analytics Dashboard (Classifier restricted)</div>
+                </button>
+            </div>
+            <button class="btn btn-primary" id="confirmRoleBtn" style="width: 100%; margin-top: 16px;">Continue as Selected Role</button>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         HEADER
+    ============================================================ -->
+    <header class="corp-header">
+        <div class="header-container">
+
+            <div class="brand-block">
+                <div class="oil-emblem">OIL</div>
+                <div class="brand-info">
+                    <h1>Oil India Limited</h1>
+                    <span class="sub-brand">HSSE — SIF Precursor Management System</span>
+                </div>
+            </div>
+
+            <nav class="nav-links-menu" aria-label="Main navigation">
+                <button class="nav-item active" data-tab="tab-home">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    <span>Overview</span>
+                </button>
+                <button class="nav-item" data-tab="tab-overview">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-tab="tab-classifier">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span>Incident Classifier</span>
+                </button>
+                <button class="nav-item" data-tab="tab-density">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span>Site Risk Analysis</span>
+                </button>
+                <button class="nav-item" data-tab="tab-iogp">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Compliance</span>
+                </button>
+                <button class="nav-item" data-tab="tab-explorer">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Reports</span>
+                </button>
+            </nav>
+
+            <div class="header-utilities">
+                <div class="role-badge-box" id="headerRoleBadge" title="Click to switch role">
+                    <span class="role-dot"></span>
+                    <span id="roleLabel">Role: HSE Manager</span>
+                </div>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>System Active</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="exportDataBtn">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Export CSV</span>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- ============================================================
+         MAIN CONTENT
+    ============================================================ -->
+    <div class="main-wrapper">
+
+        <!-- ============================================================
+             TAB: HOME / LANDING
+        ============================================================ -->
+        <div class="tab-content active" id="tab-home">
+
+            <!-- Hero -->
+            <section class="hero-split-banner">
+                <div class="hero-text-col">
+                    <div class="hero-tag">Oil India Limited &nbsp;·&nbsp; HSSE Department</div>
+                    <h1>SIF Precursor Identification &amp; Safety Triage Platform</h1>
+                    <p class="hero-subtitle">A structured system to distinguish Serious Injury &amp; Fatality (SIF) precursors from routine low-severity observations — aligned with OISD-STD-105, DGMS OMR 2017, and the 10 IOGP Life-Saving Rules.</p>
+
+                    <div class="hero-actions">
+                        <button class="btn btn-primary btn-hero" id="heroStartBtn">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <span>Classify an Incident Report</span>
+                        </button>
+                        <button class="btn btn-outline-dark btn-hero" id="heroDensityBtn">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            <span>View Site Risk Analysis</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="hero-visual-col">
+                    <div class="hero-card-frame" id="heroCarousel">
+                        <div class="hero-slide active">
+                            <img src="/images/drilling_rig.png" alt="Oil India Baghjan oil field safety" class="hero-img">
+                        </div>
+                        <div class="hero-slide">
+                            <img src="/images/bg_oilfield.png" alt="Oil India Duliajan GGS Station" class="hero-img">
+                        </div>
+                        <div class="hero-slide">
+                            <img src="/images/refinery.png" alt="Oil India Digboi Refinery Area" class="hero-img">
+                        </div>
+                        <div class="hero-slide">
+                            <img src="/images/moran_ocs_plant.png" alt="Oil India Moran OCS Station" class="hero-img">
+                        </div>
+
+                        <div class="hero-card-overlay">
+                            <div class="hero-overlay-top">
+                                <div class="h-stat-pill" id="heroLocationBadge">
+                                    <span class="h-dot"></span>
+                                    <span id="heroLocationText">Oil India Limited &middot; Baghjan Field #5</span>
+                                </div>
+                            </div>
+                            <div class="carousel-dots-row" id="carouselDots">
+                                <span class="c-dot active" data-slide="0"></span>
+                                <span class="c-dot" data-slide="1"></span>
+                                <span class="c-dot" data-slide="2"></span>
+                                <span class="c-dot" data-slide="3"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Summary Metrics -->
+            <section class="metrics-strip-banner">
+                <div class="metric-pill">
+                    <div class="metric-icon-box">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-val">500+</div>
+                        <div class="metric-lbl">Safety Observations Processed</div>
+                    </div>
+                </div>
+
+                <div class="metric-pill">
+                    <div class="metric-icon-box">
+                        <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-val">23.2%</div>
+                        <div class="metric-lbl">SIF Precursor Rate (Target: 20–25%)</div>
+                    </div>
+                </div>
+
+                <div class="metric-pill">
+                    <div class="metric-icon-box">
+                        <svg class="svg-icon icon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-val">100%</div>
+                        <div class="metric-lbl">OISD-STD-105 &amp; IOGP Alignment</div>
+                    </div>
+                </div>
+
+                <div class="metric-pill">
+                    <div class="metric-icon-box">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    </div>
+                    <div>
+                        <div class="metric-val">12</div>
+                        <div class="metric-lbl">OIL Installations Monitored</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Before vs After -->
+            <section class="transformation-section">
+                <div class="section-header center">
+                    <h2>Why a Dedicated SIF Triage System?</h2>
+                    <p>Most safety programs treat all incidents equally. DEKRA &amp; EEI research shows only 20–25% carry genuine fatal potential.</p>
+                </div>
+
+                <div class="comparison-grid">
+                    <div class="compare-card legacy">
+                        <div class="compare-badge legacy-badge">Traditional Approach</div>
+                        <h3>Manual Periodic Safety Review</h3>
+                        <div class="card-visual-thumb">
+                            <img src="/images/refinery.png" alt="Manual flare stack inspection" class="thumb-img">
+                        </div>
+                        <ul class="compare-list">
+                            <li>
+                                <svg class="svg-icon icon-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                <span><strong>30–90 day reporting lag:</strong> Observations collated manually on monthly or quarterly intervals, delaying corrective action.</span>
+                            </li>
+                            <li>
+                                <svg class="svg-icon icon-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                <span><strong>Injury distortion effect:</strong> High-volume low-severity incidents (slips, sprains) overshadow zero-injury fatal precursors in prioritisation.</span>
+                            </li>
+                            <li>
+                                <svg class="svg-icon icon-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                <span><strong>No standard taxonomy:</strong> Free-text field slips lack consistent hazard classification, making cross-site benchmarking unreliable.</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="compare-card modern">
+                        <div class="compare-badge modern-badge">This Platform</div>
+                        <h3>Automated SIF Triage &amp; Classification</h3>
+                        <div class="card-visual-thumb">
+                            <img src="/images/real_safety_engineer_dashboard.png" alt="Oil India digital safety audit" class="thumb-img">
+                        </div>
+                        <ul class="compare-list">
+                            <li>
+                                <svg class="svg-icon icon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <span><strong>Immediate classification:</strong> Incident reports are assessed and risk-rated as soon as they are submitted — no batch processing.</span>
+                            </li>
+                            <li>
+                                <svg class="svg-icon icon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <span><strong>Energy &amp; barrier analysis:</strong> Separates high-energy hazard sources (E) and barrier integrity state (B) from minor housekeeping observations.</span>
+                            </li>
+                            <li>
+                                <svg class="svg-icon icon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <span><strong>Auto IOGP &amp; OISD mapping:</strong> Each report is automatically mapped to the relevant Life-Saving Rule and corresponding OISD action plan.</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Classification Methodology -->
+            <section class="physics-explainer-section">
+                <div class="physics-explainer-card">
+                    <div class="section-header">
+                        <h2>Classification Methodology — Energy &amp; Barrier Analysis</h2>
+                        <p>Based on DEKRA &amp; EEI industry research. A SIF precursor requires both a high-energy hazard source and a compromised or missing control barrier.</p>
+                    </div>
+
+                    <div class="physics-explainer-grid">
+                        <div class="stage-box">
+                            <div class="stage-header">
+                                <span class="stage-badge">Step 1 — Energy Source Assessment</span>
+                                <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                            </div>
+                            <h4>High-Energy Hazard Identification</h4>
+                            <p class="desc">The report is scanned for physical energy thresholds with potential to cause serious injury or fatality:</p>
+                            <div class="energy-tags-grid">
+                                <div class="e-tag">Pressure: <strong>&gt; 100 PSI</strong></div>
+                                <div class="e-tag">Working at Height: <strong>&gt; 2.0 m</strong></div>
+                                <div class="e-tag">Suspended Load: <strong>&gt; 500 kg</strong></div>
+                                <div class="e-tag">Electrical: <strong>&gt; 50 V</strong></div>
+                                <div class="e-tag">Flammables: <strong>H₂S &amp; Crude / LPG</strong></div>
+                                <div class="e-tag">Mobile Heavy Equipment</div>
+                            </div>
+                        </div>
+
+                        <div class="stage-box">
+                            <div class="stage-header">
+                                <span class="stage-badge red">Step 2 — Barrier Integrity Check</span>
+                                <svg class="svg-icon icon-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            </div>
+                            <h4>Control Barrier Status Evaluation</h4>
+                            <p class="desc">Determines whether engineered or procedural barriers were present and functioning:</p>
+                            <div class="energy-tags-grid">
+                                <div class="e-tag">LOTO / Isolation: <strong>BOP &amp; Valve</strong></div>
+                                <div class="e-tag">Fall Protection: <strong>Rig Harness</strong></div>
+                                <div class="e-tag">Pressure Relief Valves</div>
+                                <div class="e-tag">Gas Monitoring Alarms</div>
+                                <div class="e-tag">Whip-Check Restraints</div>
+                                <div class="e-tag">Permit to Work (PTW)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Industry Benchmark -->
+            <section class="benchmark-card">
+                <div class="benchmark-header">
+                    <div class="b-icon">
+                        <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <h3>Industry Benchmark — Why Fatal and Non-Fatal Incidents Have Different Root Causes</h3>
+                        <p>DEKRA &amp; EEI 15-year analysis of US industrial accidents shows that low-severity incident rates and fatality rates are decoupled — separate intervention strategies are required.</p>
+                    </div>
+                </div>
+
+                <div class="stat-bars-grid">
+                    <div class="stat-item">
+                        <div class="stat-head">
+                            <span>Non-Fatal Incident Rate Reduction (15 years)</span>
+                            <span class="stat-val red">−51%</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill red" style="width: 51%;"></div></div>
+                        <span class="stat-desc">Driven by improved ergonomics and PPE compliance — effective for slips, strains, and minor injuries.</span>
+                    </div>
+
+                    <div class="stat-item">
+                        <div class="stat-head">
+                            <span>Fatal Incident Rate Reduction (same 15 years)</span>
+                            <span class="stat-val amber">−25.5%</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill amber" style="width: 25.5%;"></div></div>
+                        <span class="stat-desc">Fatalities declined at half the rate — because fatal precursors require dedicated energy-barrier controls, not PPE.</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Regulatory Compliance -->
+            <section class="oisd-section">
+                <div class="section-header">
+                    <h2>Regulatory &amp; Statutory Compliance</h2>
+                    <p>Aligned with all applicable Indian Petroleum and Mines Safety regulations</p>
+                </div>
+
+                <div class="compliance-split-container">
+                    <div class="compliance-hero-card">
+                        <div class="hero-card-glow"></div>
+                        <div class="hero-shield-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <h3>OISD &amp; DGMS Statutory Mandate</h3>
+                        <p>Compliant with all applicable Indian Petroleum Laws and global oil &amp; gas safety directives. All classifications are audit-traceable.</p>
+                        <div class="compliance-stats-pill">
+                            <span class="pulse-dot"></span>
+                            <span>Statutory Audit Ready</span>
+                        </div>
+                    </div>
+
+                    <div class="compliance-matrix-list">
+                        <div class="compliance-row active">
+                            <div class="comp-row-header">
+                                <span class="comp-code">OISD-STD-105</span>
+                                <span class="comp-tag green">Work Permit</span>
+                            </div>
+                            <h4>Work Permit System (PTW)</h4>
+                            <p>Mandatory cross-checking of Hot Work, Cold Work, and Confined Space Entry permits before high-energy operations commence.</p>
+                        </div>
+
+                        <div class="compliance-row">
+                            <div class="comp-row-header">
+                                <span class="comp-code">OISD-GDN-145</span>
+                                <span class="comp-tag amber">Root Cause</span>
+                            </div>
+                            <h4>Incident Investigation Taxonomy</h4>
+                            <p>Standardised taxonomy for root-cause analysis, barrier failure logging, and mandatory corrective action plan generation.</p>
+                        </div>
+
+                        <div class="compliance-row">
+                            <div class="comp-row-header">
+                                <span class="comp-code">DGMS OMR 2017</span>
+                                <span class="comp-tag cyan">Mines Safety</span>
+                            </div>
+                            <h4>Oil Mines Regulations</h4>
+                            <p>Directorate General of Mines Safety compliance for onshore drilling rigs, workover rigs, and hydrocarbon storage facilities.</p>
+                        </div>
+
+                        <div class="compliance-row">
+                            <div class="comp-row-header">
+                                <span class="comp-code">IOGP LSR 2020</span>
+                                <span class="comp-tag purple">Global Standard</span>
+                            </div>
+                            <h4>10 IOGP Life-Saving Rules</h4>
+                            <p>International Association of Oil &amp; Gas Producers standard rules: Bypassing Safeguards, Energy Isolation, Confined Space, Driving, and more.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Process Workflow -->
+            <section class="pipeline-workflow-section">
+                <div class="section-header center">
+                    <h2>How the Classification Process Works</h2>
+                    <p>From raw field observation to a documented risk assessment in four structured steps</p>
+                </div>
+
+                <div class="pipeline-stepper-timeline">
+                    <div class="stepper-laser-track">
+                        <div class="stepper-laser-pulse"></div>
+                    </div>
+
+                    <div class="stepper-nodes-row">
+                        <div class="stepper-node-item top-node">
+                            <div class="node-content">
+                                <span class="node-step-label">Step 1</span>
+                                <h4>Field Report Submitted</h4>
+                                <p>HSE officer logs a free-text observation via the incident classifier.</p>
+                            </div>
+                            <div class="node-pin-wrapper">
+                                <div class="node-pin">1</div>
+                                <div class="node-connector"></div>
+                            </div>
+                        </div>
+
+                        <div class="stepper-node-item bottom-node">
+                            <div class="node-pin-wrapper">
+                                <div class="node-connector"></div>
+                                <div class="node-pin active">2</div>
+                            </div>
+                            <div class="node-content">
+                                <span class="node-step-label">Step 2</span>
+                                <h4>Energy &amp; Barrier Assessment</h4>
+                                <p>The report is checked for high-energy sources and barrier integrity status.</p>
+                            </div>
+                        </div>
+
+                        <div class="stepper-node-item top-node">
+                            <div class="node-content">
+                                <span class="node-step-label">Step 3</span>
+                                <h4>IOGP Rule Mapping</h4>
+                                <p>The incident is matched against the 10 IOGP Life-Saving Rules using semantic analysis.</p>
+                            </div>
+                            <div class="node-pin-wrapper">
+                                <div class="node-pin">3</div>
+                                <div class="node-connector"></div>
+                            </div>
+                        </div>
+
+                        <div class="stepper-node-item bottom-node">
+                            <div class="node-pin-wrapper">
+                                <div class="node-connector"></div>
+                                <div class="node-pin green">4</div>
+                            </div>
+                            <div class="node-content">
+                                <span class="node-step-label">Step 4</span>
+                                <h4>OISD Action Plan Issued</h4>
+                                <p>A risk verdict and mandatory corrective action plan are generated per OISD protocols.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Module Cards -->
+            <section class="modules-section">
+                <div class="section-header">
+                    <h2>Platform Modules</h2>
+                    <p>Four integrated tools for SIF precursor management across OIL installations</p>
+                </div>
+
+                <div class="bento-box-container">
+                    <!-- Module 1 -->
+                    <div class="bento-card hero-bento" data-target="tab-classifier">
+                        <div class="bento-badge-row">
+                            <span class="bento-pill live-pill">● Active</span>
+                            <span class="bento-tag">Primary Module</span>
+                        </div>
+                        <h3>Incident Classifier</h3>
+                        <p>Submit any free-text safety observation. The system assesses the energy source, barrier state, and applicable IOGP Life-Saving Rule — then issues a mandatory OISD action plan.</p>
+
+                        <div class="bento-demo-snippet">
+                            <span class="snippet-label">Sample report:</span>
+                            <div class="snippet-box">"Chiksan line surged to 2,400 PSI during workover at Baghjan while whip-check cable was unsecured."</div>
+                        </div>
+
+                        <div class="bento-cta-row">
+                            <button class="bento-btn">Classify an Incident &rarr;</button>
+                        </div>
+                    </div>
+
+                    <!-- Module 2 -->
+                    <div class="bento-card" data-target="tab-density">
+                        <div class="bento-badge-row">
+                            <span class="bento-pill amber-pill">12 Sites</span>
+                        </div>
+                        <h3>Site Risk Analysis</h3>
+                        <p>SIF precursor density ranking across OIL installations — Duliajan, Baghjan, Moran, Digboi, Jaisalmer and others — ranked by incidents per 100 observations.</p>
+                        <div class="bento-footer">
+                            <span class="mod-link">View site rankings &rarr;</span>
+                        </div>
+                    </div>
+
+                    <!-- Module 3 -->
+                    <div class="bento-card" data-target="tab-iogp">
+                        <div class="bento-badge-row">
+                            <span class="bento-pill cyan-pill">IOGP LSR 2020</span>
+                        </div>
+                        <h3>Compliance Matrix</h3>
+                        <p>Breakdown of all observations mapped against the 10 IOGP Life-Saving Rules — identifies which rules are most frequently breached across the portfolio.</p>
+                        <div class="bento-footer">
+                            <span class="mod-link">View compliance breakdown &rarr;</span>
+                        </div>
+                    </div>
+
+                    <!-- Module 4 -->
+                    <div class="bento-card" data-target="tab-explorer">
+                        <div class="bento-badge-row">
+                            <span class="bento-pill green-pill">500 records</span>
+                        </div>
+                        <h3>Reports Database</h3>
+                        <p>Full searchable record of all 500 safety observations with text search, SIF filter, and CSV export for OISD statutory audits.</p>
+                        <div class="bento-footer">
+                            <span class="mod-link">Browse reports &rarr;</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div><!-- /tab-home -->
+
+        <!-- ============================================================
+             TAB: DASHBOARD (KPI + Charts)
+        ============================================================ -->
+        <div class="tab-content" id="tab-overview">
+
+            <!-- Page title -->
+            <div class="page-header">
+                <h2>Safety Performance Dashboard</h2>
+                <p>Aggregated SIF precursor intelligence across all Oil India Limited installations &mdash; updated from live dataset</p>
+            </div>
+
+            <!-- KPI Strip -->
+            <div class="kpi-banner">
+                <div class="kpi-box">
+                    <div class="kpi-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <span class="kpi-title">Total Observations</span>
+                        <div class="kpi-num" id="kpiTotalReports">500</div>
+                        <span class="kpi-sub">UA &middot; UC &middot; Near-Miss &middot; Incident</span>
+                    </div>
+                </div>
+
+                <div class="kpi-box alert">
+                    <div class="kpi-icon">
+                        <svg class="svg-icon icon-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <span class="kpi-title">SIF Precursor Rate</span>
+                        <div class="kpi-num" id="kpiSifRate">23.2%</div>
+                        <span class="kpi-sub">DEKRA target: 20&ndash;25%</span>
+                    </div>
+                </div>
+
+                <div class="kpi-box">
+                    <div class="kpi-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </div>
+                    <div>
+                        <span class="kpi-title">Highest Risk Site</span>
+                        <div class="kpi-num" id="kpiTopSite">Makum</div>
+                        <span class="kpi-sub">38.2% precursor density</span>
+                    </div>
+                </div>
+
+                <div class="kpi-box">
+                    <div class="kpi-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <span class="kpi-title">Top Breached Rule</span>
+                        <div class="kpi-num" id="kpiTopRule">Line of Fire</div>
+                        <span class="kpi-sub">Most frequent hazard mechanism</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Site chart + IOGP donut -->
+            <div class="dash-grid-6040">
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>SIF Precursor Density by Site</h3>
+                            <p class="card-subtitle">Ranked by proportion of SIF-potential reports per installation</p>
+                        </div>
+                        <span class="badge">% Density</span>
+                    </div>
+                    <div class="chart-holder">
+                        <canvas id="overviewSiteChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>IOGP Life-Saving Rules Breakdown</h3>
+                            <p class="card-subtitle">Distribution across the 10 IOGP LSR categories</p>
+                        </div>
+                        <span class="badge">IOGP 2020</span>
+                    </div>
+                    <div class="chart-holder">
+                        <canvas id="overviewLsrChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 3: Activity Risk Intelligence table -->
+            <div class="corp-card" style="margin-bottom: var(--space-lg);">
+                <div class="card-title">
+                    <div>
+                        <h3>Department Risk Intelligence</h3>
+                        <p class="card-subtitle">SIF precursor density and average risk score by operational department</p>
+                    </div>
+                    <span class="badge badge-amber">By Department</span>
+                </div>
+                <div class="table-container">
+                    <table class="corp-table" id="activityRiskTable">
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Total Reports</th>
+                                <th>SIF Precursors</th>
+                                <th>Precursor Density</th>
+                                <th>Avg Risk Score</th>
+                                <th>Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityRiskBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Row 4: Barrier failures + Severity Donut + Precursor Alerts (3-column grid) -->
+            <div class="dash-grid-333333" style="margin-bottom: var(--space-lg);">
+
+                <!-- Barrier Failure Chart -->
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>Barrier Failure Analysis</h3>
+                            <p class="card-subtitle">Failed safety controls</p>
+                        </div>
+                    </div>
+                    <div class="chart-holder">
+                        <canvas id="barrierFailureChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Feature 19: Severity Score Distribution Donut -->
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>Severity Score Distribution</h3>
+                            <p class="card-subtitle">DEKRA SIF risk rating breakdown</p>
+                        </div>
+                    </div>
+                    <div class="chart-holder">
+                        <canvas id="severityDonutChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Precursor Alerts Panel -->
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>Recurring Precursor Patterns</h3>
+                            <p class="card-subtitle">Top SIF precursor scenarios</p>
+                        </div>
+                        <span class="badge badge-red">Auto-detected</span>
+                    </div>
+                    <div id="precursorAlertsList" class="precursor-alerts-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 5: Monthly trend & Temporal Forecast -->
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h3>Monthly SIF Precursor Trend &amp; Temporal Forecast</h3>
+                        <p class="card-subtitle">Total observations vs SIF-potential count over time &mdash; with 2-month linear projection</p>
+                    </div>
+                    <span class="badge">Temporal Analysis</span>
+                </div>
+                <div class="chart-holder-large">
+                    <canvas id="monthlyTrendChart"></canvas>
+                </div>
+                <!-- Feature 9: Temporal Forecast Alert Banner -->
+                <div class="forecast-alert-banner" id="forecastAlertBanner">
+                    <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    <span id="forecastText">Temporal Risk Forecast: Computing linear extrapolation...</span>
+                </div>
+            </div>
+
+            <!-- Feature 7: Safety Knowledge Graph Section -->
+            <div class="corp-card" style="margin-top: var(--space-lg);" id="knowledgeGraphCard">
+                <div class="card-title">
+                    <div>
+                        <h3>Safety Relationship Map &mdash; Knowledge Graph</h3>
+                        <p class="card-subtitle">Force-directed relational network: Department &rarr; Life-Saving Rule &rarr; Barrier Category &rarr; Precursor Pattern</p>
+                    </div>
+                    <div class="kg-legend">
+                        <span class="kg-tag kg-dept">Department</span>
+                        <span class="kg-tag kg-lsr">IOGP Rule</span>
+                        <span class="kg-tag kg-barrier">Barrier</span>
+                        <span class="kg-tag kg-pattern">Precursor</span>
+                    </div>
+                </div>
+                <div class="kg-holder" style="height: 480px; position: relative;">
+                    <svg id="knowledgeGraphSvg" width="100%" height="100%"></svg>
+                </div>
+            </div>
+
+        </div><!-- /tab-overview -->
+
+
+        <!-- ============================================================
+             TAB: INCIDENT CLASSIFIER
+        ============================================================ -->
+        <div class="tab-content" id="tab-classifier">
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>Incident Classifier &mdash; SIF Precursor Assessment</h2>
+                        <p class="desc">Enter a free-text safety observation. The system assesses energy source, barrier integrity, and IOGP rule mapping &mdash; then issues an OISD action plan with an explainable risk score.</p>
+                    </div>
+                    <span class="badge">OISD-STD-105 &middot; IOGP LSR</span>
+                </div>
+
+                <div class="classifier-layout">
+                    <!-- Input -->
+                    <div class="input-panel">
+                        <label class="field-label"><strong>Sample reports &mdash; click to load:</strong></label>
+                        <div class="presets-grid">
+                            <button class="scenario-btn active" data-text="During workover operations at Baghjan, 2-inch Chiksan line surged to 2400 PSI while whip check cable was unsecured.">Baghjan: Chiksan line overpressure (2,400 PSI)</button>
+                            <button class="scenario-btn" data-text="Roustabout spotted at 22m elevation on derrick monkey board without secondary safety lanyard hooked.">Derrick work at height &mdash; lanyard not attached</button>
+                            <button class="scenario-btn" data-text="Hydraulic hose burst at 3000 PSI on rig floor; whip check successfully held line and prevented whipping.">Hydraulic hose burst &mdash; whip-check held</button>
+                            <button class="scenario-btn" data-text="Worker slipped on oily canteen walkway near Duliajan administrative office, sustained severe ankle sprain and screaming in pain.">Canteen walkway slip &mdash; ankle sprain</button>
+                        </div>
+
+                        <!-- Feature 16: Language Detection Badge -->
+                        <div class="lang-badge-row" style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; margin-bottom: 6px;">
+                            <label class="field-label" style="margin: 0;"><strong>Incident observation text:</strong></label>
+                            <span class="lang-badge" id="langBadge">Detected: English (Standard Domain)</span>
+                        </div>
+                        <textarea id="classifierTextarea" rows="5" placeholder="Enter the full text of the safety observation or incident report here...">During workover operations at Baghjan, 2-inch Chiksan line surged to 2400 PSI while whip check cable was unsecured.</textarea>
+
+                        <button class="btn btn-primary btn-large" id="analyzeBtn">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <span>Classify Incident</span>
+                        </button>
+                    </div>
+
+                    <!-- Output -->
+                    <div class="output-panel">
+
+                        <!-- Risk Score Banner -->
+                        <div class="verdict-banner SIF_POTENTIAL" id="verdictBanner">
+                            <div>
+                                <div class="verdict-label">Risk Classification</div>
+                                <div class="verdict-title" id="verdictText">SIF Precursor &mdash; High Risk</div>
+                            </div>
+                            <div class="risk-score-box">
+                                <div class="risk-score-num" id="riskScoreNum">94</div>
+                                <div class="risk-score-label">/100 Risk Score</div>
+                            </div>
+                        </div>
+
+                        <!-- Confidence bar -->
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="confMeter" style="width: 94%;"></div>
+                        </div>
+                        <div class="conf-label-row">
+                            <span>Confidence</span>
+                            <span id="verdictConf">94%</span>
+                        </div>
+
+                        <!-- Explainable Contributing Factors -->
+                        <div class="factors-card" id="factorsCard">
+                            <div class="factors-header">
+                                <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <strong>Contributing Risk Factors</strong>
+                            </div>
+                            <ul class="factors-list" id="factorsList">
+                                <!-- Populated by JS -->
+                            </ul>
+                        </div>
+
+                        <!-- Assessment Grid -->
+                        <div class="physics-grid">
+                            <div class="p-box">
+                                <span class="p-title">IOGP Life-Saving Rule</span>
+                                <span class="p-value" id="resRule">Line of Fire</span>
+                            </div>
+                            <div class="p-box">
+                                <span class="p-title">Energy Source Identified</span>
+                                <span class="p-value" id="resEnergy">Pressure &mdash; 2,400 PSI</span>
+                            </div>
+                            <div class="p-box">
+                                <span class="p-title">Barrier Status</span>
+                                <span class="p-value" id="resBarrier">Absent / Failed</span>
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <strong>Assessment rationale:</strong>
+                            <p id="resRationale">High-energy pressure source detected. Control barrier (whip-check cable) was unsecured &mdash; barrier is absent or failed.</p>
+                        </div>
+
+                        <!-- Feature 15: Hierarchy of Controls Action Plan -->
+                        <div class="info-card alert-card">
+                            <strong>Required OISD Corrective Actions (Hierarchy of Controls):</strong>
+                            <p id="resActionPlan" style="margin-bottom: 12px; font-weight: 600;">CRITICAL: Clear all personnel from drop/swing zone. Install certified steel whip-check cables on pressurized lines (&gt;100 PSI) and secure rotating shaft guards.</p>
+                            <div class="hierarchy-actions-list" id="hierarchyActionsList">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 8: Similar Incident Retrieval Panel -->
+                <div class="corp-card" style="margin-top: 24px;" id="similarReportsCard">
+                    <div class="card-title">
+                        <div>
+                            <h3>Similar Historical Reports</h3>
+                            <p class="card-subtitle">Top matching safety observations from the Oil India dataset based on TF-IDF semantic similarity</p>
+                        </div>
+                        <span class="badge">Cosine Similarity</span>
+                    </div>
+                    <div class="similar-reports-list" id="similarReportsList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-classifier -->
+
+
+        <!-- ============================================================
+             TAB: SITE RISK ANALYSIS
+        ============================================================ -->
+        <div class="tab-content" id="tab-density">
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>Site Risk Analysis — SIF Precursor Density</h2>
+                        <p class="desc">SIF precursor density = SIF reports ÷ total reports × 100. Ranked across all OIL installations to identify highest-risk sites requiring priority intervention.</p>
+                    </div>
+                </div>
+
+                <div class="chart-holder-large">
+                    <canvas id="densityDetailChart"></canvas>
+                </div>
+
+                <div class="table-container" style="margin-top: 20px;">
+                    <table class="corp-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Installation</th>
+                                <th>Total Reports</th>
+                                <th>SIF Precursors</th>
+                                <th>Precursor Density</th>
+                                <th>Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody id="densityTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- /tab-density -->
+
+        <!-- ============================================================
+             TAB: COMPLIANCE MATRIX
+        ============================================================ -->
+        <div class="tab-content" id="tab-iogp">
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>IOGP Life-Saving Rules — Compliance &amp; Breach Analysis</h2>
+                        <p class="desc">Distribution of safety observations mapped against the 10 IOGP Life-Saving Rules. Identifies which rules are most frequently linked to SIF precursor incidents.</p>
+                    </div>
+                    <span class="badge">IOGP LSR 2020</span>
+                </div>
+
+                <div class="chart-holder-large">
+                    <canvas id="iogpDetailChart"></canvas>
+                </div>
+            </div>
+        </div><!-- /tab-iogp -->
+
+        <!-- ============================================================
+             TAB: REPORTS DATABASE
+        ============================================================ -->
+        <div class="tab-content" id="tab-explorer">
+            <div class="corp-card">
+                <div class="card-title filter-header">
+                    <div>
+                        <h2>Safety Reports Database</h2>
+                        <p class="desc">Full record of all 500 observations — searchable by site, report ID, or keyword. Export for OISD statutory audit.</p>
+                    </div>
+
+                    <div class="search-filter-controls">
+                        <input type="text" id="explorerSearch" placeholder="Search by site, ID, keyword&hellip;" class="corp-input">
+                        <div class="btn-group">
+                            <button class="filter-btn active" data-filter="all">All (500)</button>
+                            <button class="filter-btn" data-filter="sif">SIF Precursors (116)</button>
+                            <button class="filter-btn" data-filter="nonsif">Non-SIF (384)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="corp-table">
+                        <thead>
+                            <tr>
+                                <th>Report ID</th>
+                                <th>Date</th>
+                                <th>Installation</th>
+                                <th>Department</th>
+                                <th>Type</th>
+                                <th>Observation</th>
+                                <th>Classification</th>
+                                <th>IOGP Rule</th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterExplorerBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- /tab-explorer -->
+
+    </div><!-- /main-wrapper -->
+
+    <!-- ============================================================
+         FOOTER
+    ============================================================ -->
+    <footer class="corp-footer">
+        <p>© 2026 Oil India Limited (OIL) &nbsp;·&nbsp; Health, Safety, Security &amp; Environment Department &nbsp;·&nbsp; HSSE SIF Precursor Management System &nbsp;·&nbsp; OISD · DGMS · IOGP Compliant</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
