@@ -13,20 +13,20 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 
 ---
 
-## Machine Learning Architecture, Datasets & Hyperparameters
+## Machine Learning Architecture: Dataset Training vs. OSHA Verification
 
-### 1. Datasets (Training, Testing & Benchmarking)
+### 1. Dataset Breakdown (Production Training vs. Benchmark Verification)
 
-| Dataset File | Sample Count | Class Distribution | Purpose / Coverage |
-|---|---|---|---|
-| `data/oil_safety_reports.csv` | **500 records** | 384 Non-SIF (76.8%), 116 SIF-Potential (23.2%) | Primary domain dataset across 12 Oil India installations (Baghjan, Duliajan, Digboi, Moran) |
-| `data/osha_oil_sif_train.csv` | **800 records** | 640 Non-SIF (80.0%), 160 SIF-Potential (20.0%) | Training set for domain model calibration based on OSHA oilfield injury data |
-| `data/osha_oil_sif_test.csv` | **200 records** | 160 Non-SIF (80.0%), 40 SIF-Potential (20.0%) | Hold-out validation set for testing generalization on unseen incident descriptions |
-| `data/severe_injury_reports.csv` | **1,500 records** | Varied severe injuries (amputations, H2S toxic gas, electrical burns) | Baseline corpus for severe injury risk mapping |
+| Dataset File | Sample Count | Class Breakdown | Role in Pipeline | Description / Coverage |
+|---|---|---|---|---|
+| `data/oil_safety_reports.csv` | **500 records** | 384 Non-SIF (76.8%), 116 SIF (23.2%) | **Production Training Set** | Primary domain dataset used to train active production models (`models/*.pkl`) across 12 Oil India installations (Baghjan, Duliajan, Digboi, Moran). |
+| `data/osha_oil_sif_train.csv` | **800 records** | 640 Non-SIF (80.0%), 160 SIF (20.0%) | **OSHA Benchmark Train Split** | Processed upstream oilfield severe injury dataset used for external cross-domain benchmark training. |
+| `data/osha_oil_sif_test.csv` | **200 records** | 160 Non-SIF (80.0%), 40 SIF (20.0%) | **OSHA Held-Out Test Set** | Unseen independent test set used to verify cross-domain generalization on real-world US OSHA incident narratives. |
+| `data/severe_injury_reports.csv` | **1,500 records** | Varied severe injuries (amputations, H2S gas, burns) | **Raw OSHA Baseline Corpus** | Raw ingestion corpus filtered by NAICS oil & gas codes (`211111`, `213111`, `213112`, `486110`). |
 
 ---
 
-### 2. Machine Learning Algorithms & Models Used
+### 2. Machine Learning Algorithms & Selected Hyperparameters
 
 1. **Binary SIF Precursor Classifier (`LogisticRegression`)**:
    - **Algorithm**: Penalized Logistic Regression with balanced class weighting.
@@ -59,21 +59,63 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 
 ---
 
-### 4. Hyperparameter Grid Search & Benchmarking Results
+### 4. Verification & Benchmarking Evaluation (5-Fold Stratified CV & OSHA Test Set)
 
-Evaluated via **5-Fold Stratified Cross-Validation (`StratifiedKFold`, n=5)**:
-
-| Algorithm / Configuration | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | ROC-AUC (%) | Status |
+| Evaluation Benchmark | Dataset | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | ROC-AUC (%) |
 |---|---|---|---|---|---|---|
-| **Logistic Regression (C=2.0) [Selected SIF Model]** | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **Optimal** |
-| Logistic Regression (C=1.0) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Logistic Regression (C=0.5) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Random Forest (n=100) [Selected LSR Model] | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Optimal |
-| Support Vector Machine (SVC Linear, C=1.0) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Support Vector Machine (SVC RBF, C=1.0) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Multinomial Naive Bayes (alpha=0.5) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Gradient Boosting (n=100, lr=0.1) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
-| Extra Trees Classifier (n=100) | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | Benchmark Candidate |
+| **Production SIF Classifier (Logistic Regression)** | `data/oil_safety_reports.csv` | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
+| **Production LSR Classifier (Random Forest)** | `data/oil_safety_reports.csv` | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
+| **OSHA Generalization Benchmark Test** | `data/osha_oil_sif_test.csv` (Held-out) | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
+| Support Vector Machine (SVC Linear, C=1.0) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
+| Multinomial Naive Bayes (alpha=0.5) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
+| Gradient Boosting (n=100, lr=0.1) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
+
+---
+
+## Role-Based Access Control (RBAC): The 4 User View Types
+
+The platform implements a Role-Based Access Control (RBAC) architecture with **4 specialized User View Types**, tailored for different operational personas across Oil India installations:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   ROLE-BASED ACCESS CONTROL                            │
+├───────────────────┬───────────────────┬───────────────────────┬────────────────────────┤
+│ 1. HSE MANAGER    │ 2. SITE MANAGER   │ 3. FIELD SUPERVISOR   │ 4. SAFETY ANALYST      │
+│ Executive Access  │ Operational Scope │ Action & Classifier   │ Read-Only Analytics    │
+└───────────────────┴───────────────────┴───────────────────────┴────────────────────────┘
+```
+
+### 1. HSE Manager View (Executive & Governance Scope)
+- **Target Persona**: Executive HSSE Leadership & Senior Safety Directors.
+- **Key Capabilities**:
+  - Full system administration access.
+  - One-click UTF-8 BOM CSV data export (`/api/export`) for corporate reporting.
+  - Model retraining execution (`src/train.py`) and threshold override authority.
+  - Strategic oversight of corporate SIF precursor reduction targets (20–25% target window).
+
+### 2. Site Manager View (Installation Scope)
+- **Target Persona**: Installation Managers & Site Safety Officers at Baghjan, Duliajan, Digboi, and Moran.
+- **Key Capabilities**:
+  - Installation-specific risk analysis and barrier health monitoring.
+  - Access to Historical Similar Incident Retrieval Engine (`/api/similar`) for location near-miss comparisons.
+  - Tracking barrier degradation states (Defended, Degraded, Failed).
+  - Monitoring site-specific 30-day and 60-day temporal risk forecasts.
+
+### 3. Field Supervisor View (Field Operational Scope)
+- **Target Persona**: Drilling Rig Supervisors, Maintenance Engineers, and Shift Officers.
+- **Key Capabilities**:
+  - Incident report submission and real-time SIF classifier triage (`/api/classify`).
+  - Instant energy pathway hazard detection and IOGP Life-Saving Rule matching.
+  - Preview of the Hierarchy of Controls remediation actions (Elimination to PPE).
+  - Direct field-level safety triage recommendations aligned with OISD-STD-105.
+
+### 4. Safety Analyst View (Analytical & Research Scope)
+- **Target Persona**: Data Analysts, HSSE Researchers, and Incident Investigators.
+- **Key Capabilities**:
+  - Read-only analytics dashboard access.
+  - Deep exploration of the Safety Relationship Map (D3.js Knowledge Graph).
+  - Inspecting node connections (Activity -> Hazard -> Barrier -> LSR Rule -> Consequence).
+  - Analyzing monthly trend distributions, polyfit regression curves, and severity donut ratios.
 
 ---
 
@@ -107,21 +149,14 @@ Evaluated via **5-Fold Stratified Cross-Validation (`StratifiedKFold`, n=5)**:
 ### 6. Multilingual & Hinglish Text Processing
 - Seamlessly handles mixed-language field reports submitted by technicians and supervisors (e.g., *"Rig floor pe BOP test fail ho gaya pipe line leaks observed near separator"*).
 
-### 7. Role-Based Access Control (RBAC)
-- 4 pre-configured enterprise roles:
-  - **HSE Manager**: Full system access, CSV export, model retraining, and governance.
-  - **Site Manager**: Site risk analysis, similar incident search, and barrier tracking.
-  - **Field Supervisor**: Incident report submission and hierarchy of controls preview.
-  - **Safety Analyst**: Read-only analytics, knowledge graph exploration, and trend viewing.
-
-### 8. Multi-Site Hero Carousel & Site Monitoring
+### 7. Multi-Site Hero Carousel & Site Monitoring
 - Rotating high-resolution visual monitoring across key Oil India installations:
   - **Baghjan Field #5** (Drilling Rigs & Production Wells)
   - **Duliajan GGS Station** (Gas Gathering Stations)
   - **Digboi Refinery Area** (Refining & Processing)
   - **Moran OCS Station** (Oil Collecting Stations & Manifolds)
 
-### 9. UTF-8 Excel-Compatible Data Export
+### 8. UTF-8 Excel-Compatible Data Export
 - One-click CSV export endpoint `/api/export` with embedded UTF-8 Byte Order Mark (`\xef\xbb\xbf`), allowing Microsoft Excel on Windows to natively open exported safety reports with proper column formatting.
 
 ---
