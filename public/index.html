@@ -50,6 +50,30 @@
     </div>
 
     <!-- ============================================================
+         DELETE REPORT CONFIRMATION MODAL
+    ============================================================ -->
+    <div class="confirm-modal-overlay" id="deleteConfirmModalOverlay" style="display: none;">
+        <div class="confirm-modal">
+            <div class="confirm-modal-header">
+                <div class="delete-warning-icon">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <h3>Delete Safety Report?</h3>
+                <p>Are you sure you want to permanently delete <strong id="deleteReportIdText">OIL-HSE-2025-XXXX</strong>?</p>
+                <p class="delete-warning-text">This action cannot be undone.</p>
+            </div>
+            <div class="confirm-modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Yes, Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
          HEADER
     ============================================================ -->
     <header class="corp-header">

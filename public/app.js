@@ -9,6 +9,7 @@ let iogpDetailChartInstance = null;
 let severityDonutChartInstance = null;
 let monthlyTrendChartInstance = null;
 let analyticsData = null;
+let pendingDeleteReportId = null;
 
 let currentRole = 'hse_manager';
 
@@ -267,6 +268,31 @@ function setupEventListeners() {
         cancelEditBtn.addEventListener('click', cancelEditingReport);
     }
 
+    const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+    if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+    }
+
+    const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', executeDeleteReport);
+    }
+
+    const deleteModal = document.getElementById('deleteConfirmModalOverlay');
+    if (deleteModal) {
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) {
+                closeDeleteModal();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && pendingDeleteReportId) {
+            closeDeleteModal();
+        }
+    });
+
     const explorerBody = document.getElementById('masterExplorerBody');
     if (explorerBody) {
         explorerBody.addEventListener('click', (e) => {
@@ -274,6 +300,13 @@ function setupEventListeners() {
             if (editBtn) {
                 const reportId = editBtn.getAttribute('data-id');
                 if (reportId) startEditingReport(reportId);
+                return;
+            }
+            const deleteBtn = e.target.closest('.delete-report-btn');
+            if (deleteBtn) {
+                const reportId = deleteBtn.getAttribute('data-id');
+                if (reportId) openDeleteModal(reportId);
+                return;
             }
         });
     }
@@ -321,8 +354,8 @@ function setupEventListeners() {
 }
 
 function compareReportsNewestFirst(a, b) {
-    const aNew = Boolean(a.is_new_submission || a.can_edit);
-    const bNew = Boolean(b.is_new_submission || b.can_edit);
+    const aNew = Boolean(a.is_new_submission || a.can_edit || a.can_delete);
+    const bNew = Boolean(b.is_new_submission || b.can_edit || b.can_delete);
     if (aNew !== bNew) {
         return aNew ? -1 : 1;
     }
@@ -337,7 +370,7 @@ function startEditingReport(reportId) {
         alert(`Report ${reportId} was not found.`);
         return;
     }
-    if (!report.is_new_submission && !report.can_edit) {
+    if (!report.is_new_submission && !report.can_edit && !report.can_delete) {
         alert(`Historical report ${reportId} is read-only and cannot be edited.`);
         return;
     }
@@ -419,6 +452,99 @@ function cancelEditingReport() {
         status.textContent = '';
     }
     if (analysisPanel) analysisPanel.hidden = true;
+}
+
+function openDeleteModal(reportId) {
+    const report = masterReports.find(r => r.report_id === reportId);
+    if (!report) {
+        alert(`Report ${reportId} was not found.`);
+        return;
+    }
+    if (!report.is_new_submission && !report.can_delete && !report.can_edit) {
+        alert(`Historical report ${reportId} is read-only and cannot be deleted.`);
+        return;
+    }
+
+    pendingDeleteReportId = reportId;
+    const reportIdText = document.getElementById('deleteReportIdText');
+    if (reportIdText) {
+        reportIdText.textContent = reportId;
+    }
+    const modal = document.getElementById('deleteConfirmModalOverlay');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeDeleteModal() {
+    pendingDeleteReportId = null;
+    const modal = document.getElementById('deleteConfirmModalOverlay');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Yes, Delete';
+    }
+    const cancelBtn = document.getElementById('cancelDeleteBtn');
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+    }
+}
+
+async function executeDeleteReport() {
+    if (!pendingDeleteReportId) return;
+
+    const reportId = pendingDeleteReportId;
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    const cancelBtn = document.getElementById('cancelDeleteBtn');
+    const status = document.getElementById('newReportStatus');
+    const editReportIdInput = document.getElementById('editReportId');
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Deleting...';
+    }
+    if (cancelBtn) {
+        cancelBtn.disabled = true;
+    }
+
+    try {
+        const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete report.');
+        }
+
+        closeDeleteModal();
+
+        // If currently editing the deleted report, reset the form
+        if (editReportIdInput && editReportIdInput.value.trim() === reportId) {
+            cancelEditingReport();
+        }
+
+        if (status) {
+            status.className = 'new-report-status success';
+            status.textContent = `Report ${reportId} was successfully deleted.`;
+        }
+
+        await fetchReports();
+        await fetchAnalytics();
+        fetchKnowledgeGraph();
+    } catch (err) {
+        console.error('Error deleting report:', err);
+        closeDeleteModal();
+        if (status) {
+            status.className = 'new-report-status error';
+            status.textContent = `Delete failed: ${err.message}`;
+        }
+        alert(`Could not delete report: ${err.message}`);
+    }
 }
 
 async function submitReportForm(event) {
@@ -712,9 +838,12 @@ function renderMasterTable() {
             ? `<span class="pill-sif">SIF Potential</span>`
             : `<span class="pill-nonsif">Non-SIF</span>`;
 
-        const canEdit = Boolean(report.is_new_submission || report.can_edit);
-        const actionCell = canEdit
-            ? `<button type="button" class="btn btn-sm btn-secondary edit-report-btn" data-id="${report.report_id}" title="Edit this newly submitted report">Edit</button>`
+        const canModify = Boolean(report.is_new_submission || report.can_edit || report.can_delete);
+        const actionCell = canModify
+            ? `<div class="report-actions-group">
+                <button type="button" class="btn btn-sm btn-secondary edit-report-btn" data-id="${report.report_id}" title="Edit this newly submitted report">Edit</button>
+                <button type="button" class="btn btn-sm btn-outline-danger delete-report-btn" data-id="${report.report_id}" title="Delete this newly submitted report">Delete</button>
+               </div>`
             : `<span class="read-only-marker" title="Historical reports are read-only">&mdash;</span>`;
 
         tr.innerHTML = `

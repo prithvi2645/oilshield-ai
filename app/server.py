@@ -176,7 +176,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -265,6 +265,27 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json_response({"error": str(e)}, status=400)
             except Exception as e:
                 self.send_json_response({"error": f"Unable to update report: {e}"}, status=500)
+        else:
+            self.send_error(404, "Endpoint not found")
+
+    def do_DELETE(self):
+        parsed_path = urllib.parse.urlparse(self.path)
+        req_path = parsed_path.path
+
+        match = re.fullmatch(r"/api/reports/([^/]+)", req_path)
+        if match:
+            report_id = match.group(1)
+            try:
+                result = self.delete_report(report_id)
+                self.send_json_response(result, status=200)
+            except LookupError as e:
+                self.send_json_response({"error": str(e)}, status=404)
+            except PermissionError as e:
+                self.send_json_response({"error": str(e)}, status=403)
+            except ValueError as e:
+                self.send_json_response({"error": str(e)}, status=400)
+            except Exception as e:
+                self.send_json_response({"error": f"Unable to delete report: {e}"}, status=500)
         else:
             self.send_error(404, "Endpoint not found")
 
@@ -394,7 +415,9 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         result_report = {column: report[column] for column in REPORT_COLUMNS}
         result_report["is_new_submission"] = True
         result_report["can_edit"] = True
+        result_report["can_delete"] = True
         return result_report, analysis
+
 
     def update_report(self, report_id, data):
         if not isinstance(report_id, str) or not re.fullmatch(r"OIL-HSE-\d{4}-\d+", report_id):
@@ -505,7 +528,73 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         result_report = {column: report[column] for column in REPORT_COLUMNS}
         result_report["is_new_submission"] = True
         result_report["can_edit"] = True
+        result_report["can_delete"] = True
         return result_report, analysis
+
+    def delete_report(self, report_id):
+        if not isinstance(report_id, str) or not re.fullmatch(r"OIL-HSE-\d{4}-\d+", report_id):
+            raise ValueError("Invalid report ID format.")
+
+        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        if not os.path.isfile(csv_path):
+            raise ValueError("Safety report dataset was not found.")
+
+        current_df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        if list(current_df.columns) != REPORT_COLUMNS:
+            raise ValueError("Safety report CSV schema does not match the expected columns.")
+
+        matching_indices = current_df.index[current_df["report_id"] == report_id].tolist()
+        if not matching_indices:
+            raise LookupError(f"Report '{report_id}' was not found.")
+        row_idx = matching_indices[0]
+        existing_row = current_df.iloc[row_idx].to_dict()
+
+        if not is_newly_submitted_report(report_id, existing_row):
+            raise PermissionError(f"Historical report '{report_id}' cannot be deleted.")
+
+        updated_df = current_df.drop(index=row_idx).reset_index(drop=True)
+
+        if len(updated_df) != len(current_df) - 1:
+            raise ValueError("Report deletion row-count verification failed.")
+        if report_id in set(updated_df["report_id"]):
+            raise ValueError("Report ID was not removed.")
+        if updated_df["report_id"].duplicated().any():
+            raise ValueError("Report ID uniqueness check failed.")
+        if list(updated_df.columns) != REPORT_COLUMNS:
+            raise ValueError("CSV column schema mismatch after deletion.")
+
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                suffix=".csv",
+                dir=os.path.dirname(csv_path),
+                delete=False,
+            ) as temp_file:
+                temp_path = temp_file.name
+                updated_df.to_csv(temp_file, index=False)
+
+            written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
+            if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
+                raise ValueError("Written CSV validation failed.")
+            os.replace(temp_path, csv_path)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        metadata = load_submitted_reports_metadata()
+        if report_id in metadata:
+            del metadata[report_id]
+            save_submitted_reports_metadata(metadata)
+
+        init_dataset_search()
+        return {
+            "message": "Report deleted successfully.",
+            "report_id": report_id
+        }
 
     def serve_csv_download(self):
         csv_path = os.path.abspath("data/oil_safety_reports.csv")
@@ -535,7 +624,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(json.dumps(data, indent=2).encode('utf-8'))
@@ -562,6 +651,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 is_new = is_newly_submitted_report(r_id, r)
                 r["is_new_submission"] = is_new
                 r["can_edit"] = is_new
+                r["can_delete"] = is_new
                 if "sif_potential" in r:
                     try:
                         r["sif_potential"] = int(r["sif_potential"])
