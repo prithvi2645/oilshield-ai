@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initRoleControl() {
     const storedRole = sessionStorage.getItem('oil_hsse_user_role');
     const modal = document.getElementById('roleModalOverlay');
-    
+
     if (!storedRole) {
         if (modal) modal.style.display = 'flex';
     } else {
@@ -257,6 +257,27 @@ function setupHomeModuleClicks() {
 }
 
 function setupEventListeners() {
+    const newReportForm = document.getElementById('newReportForm');
+    if (newReportForm) {
+        newReportForm.addEventListener('submit', submitReportForm);
+    }
+
+    const cancelEditBtn = document.getElementById('cancelEditReportBtn');
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', cancelEditingReport);
+    }
+
+    const explorerBody = document.getElementById('masterExplorerBody');
+    if (explorerBody) {
+        explorerBody.addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-report-btn');
+            if (editBtn) {
+                const reportId = editBtn.getAttribute('data-id');
+                if (reportId) startEditingReport(reportId);
+            }
+        });
+    }
+
     // Classify incident button
     const analyzeBtn = document.getElementById('analyzeBtn');
     if (analyzeBtn) {
@@ -268,7 +289,7 @@ function setupEventListeners() {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
             e.currentTarget.classList.add('active');
-            
+
             const presetText = e.currentTarget.getAttribute('data-text');
             document.getElementById('classifierTextarea').value = presetText;
             runClassification();
@@ -299,19 +320,199 @@ function setupEventListeners() {
     }
 }
 
+function compareReportsNewestFirst(a, b) {
+    const aNew = Boolean(a.is_new_submission || a.can_edit);
+    const bNew = Boolean(b.is_new_submission || b.can_edit);
+    if (aNew !== bNew) {
+        return aNew ? -1 : 1;
+    }
+    const dateCmp = (b.date || '').localeCompare(a.date || '');
+    if (dateCmp !== 0) return dateCmp;
+    return (b.report_id || '').localeCompare(a.report_id || '');
+}
+
+function startEditingReport(reportId) {
+    const report = masterReports.find(r => r.report_id === reportId);
+    if (!report) {
+        alert(`Report ${reportId} was not found.`);
+        return;
+    }
+    if (!report.is_new_submission && !report.can_edit) {
+        alert(`Historical report ${reportId} is read-only and cannot be edited.`);
+        return;
+    }
+
+    const editReportIdInput = document.getElementById('editReportId');
+    const formTitle = document.getElementById('reportFormTitle');
+    const formSubtitle = document.getElementById('reportFormDesc');
+    const submitBtn = document.getElementById('submitNewReportBtn');
+    const cancelBtn = document.getElementById('cancelEditReportBtn');
+    const editingIndicator = document.getElementById('editingModeIndicator');
+    const editingDisplay = document.getElementById('editingReportIdDisplay');
+    const status = document.getElementById('newReportStatus');
+    const analysisPanel = document.getElementById('newReportAnalysis');
+
+    if (editReportIdInput) editReportIdInput.value = report.report_id;
+    const dateInput = document.getElementById('newReportDate');
+    if (dateInput) dateInput.value = report.date || '';
+    const siteInput = document.getElementById('newReportSite');
+    if (siteInput) siteInput.value = report.site_location || '';
+    const deptInput = document.getElementById('newReportDepartment');
+    if (deptInput) deptInput.value = report.department || '';
+    const typeInput = document.getElementById('newReportType');
+    if (typeInput) typeInput.value = report.report_type || '';
+    const titleInput = document.getElementById('newReportTitle');
+    if (titleInput) titleInput.value = report.report_title || '';
+    const descInput = document.getElementById('newReportDescription');
+    if (descInput) descInput.value = report.description || '';
+    const actInput = document.getElementById('newReportActivity');
+    if (actInput) actInput.value = report.activity_being_performed || '';
+    const barInput = document.getElementById('newReportBarrier');
+    if (barInput) barInput.value = report.barrier_failure_type || '';
+    const patInput = document.getElementById('newReportPattern');
+    if (patInput) patInput.value = report.precursor_pattern || '';
+    const immInput = document.getElementById('newReportAction');
+    if (immInput) immInput.value = report.immediate_corrective_action || '';
+
+    if (formTitle) formTitle.textContent = `Edit HSE Safety Report (${report.report_id})`;
+    if (formSubtitle) formSubtitle.textContent = `Update observation details for ${report.report_id}. Saving will trigger AI re-analysis.`;
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+    if (editingIndicator) editingIndicator.style.display = 'flex';
+    if (editingDisplay) editingDisplay.textContent = report.report_id;
+
+    if (status) {
+        status.className = 'new-report-status';
+        status.textContent = `Editing ${report.report_id}. Make your changes and click Save Changes.`;
+    }
+    if (analysisPanel) analysisPanel.hidden = true;
+
+    const formCard = document.getElementById('newReportCard') || document.getElementById('newReportForm');
+    if (formCard) {
+        formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function cancelEditingReport() {
+    const form = document.getElementById('newReportForm');
+    if (form) form.reset();
+
+    const editReportIdInput = document.getElementById('editReportId');
+    if (editReportIdInput) editReportIdInput.value = '';
+
+    const formTitle = document.getElementById('reportFormTitle');
+    const formSubtitle = document.getElementById('reportFormDesc');
+    const submitBtn = document.getElementById('submitNewReportBtn');
+    const cancelBtn = document.getElementById('cancelEditReportBtn');
+    const editingIndicator = document.getElementById('editingModeIndicator');
+    const status = document.getElementById('newReportStatus');
+    const analysisPanel = document.getElementById('newReportAnalysis');
+
+    if (formTitle) formTitle.textContent = 'Add New HSE Safety Report';
+    if (formSubtitle) formSubtitle.textContent = 'Submit a new observation for existing SIF and IOGP analysis.';
+    if (submitBtn) submitBtn.textContent = 'Add New Report';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (editingIndicator) editingIndicator.style.display = 'none';
+
+    if (status) {
+        status.className = 'new-report-status';
+        status.textContent = '';
+    }
+    if (analysisPanel) analysisPanel.hidden = true;
+}
+
+async function submitReportForm(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const submitButton = document.getElementById('submitNewReportBtn');
+    const cancelButton = document.getElementById('cancelEditReportBtn');
+    const status = document.getElementById('newReportStatus');
+    const analysisPanel = document.getElementById('newReportAnalysis');
+    const editReportIdInput = document.getElementById('editReportId');
+    const editingId = editReportIdInput ? editReportIdInput.value.trim() : '';
+    const isEditMode = Boolean(editingId);
+
+    const formData = new FormData(form);
+    const report = Object.fromEntries(formData.entries());
+
+    if (status) {
+        status.className = 'new-report-status';
+        status.textContent = isEditMode
+            ? `Updating report ${editingId} and running AI re-analysis...`
+            : 'Saving report and running AI analysis...';
+    }
+    if (analysisPanel) analysisPanel.hidden = true;
+    if (submitButton) submitButton.disabled = true;
+    if (cancelButton) cancelButton.disabled = true;
+
+    try {
+        const url = isEditMode ? `/api/reports/${encodeURIComponent(editingId)}` : '/api/reports';
+        const method = isEditMode ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(report)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || (isEditMode ? 'Report update failed.' : 'Report submission failed.'));
+
+        const savedReport = data.report;
+        const analysis = data.analysis || {};
+        const successMsg = isEditMode
+            ? `Report ${savedReport.report_id} updated and re-analyzed successfully.`
+            : `Report ${savedReport.report_id} saved successfully.`;
+
+        if (isEditMode) {
+            cancelEditingReport();
+        } else {
+            form.reset();
+        }
+
+        if (status) {
+            status.className = 'new-report-status success';
+            status.textContent = successMsg;
+        }
+        if (analysisPanel) {
+            analysisPanel.hidden = false;
+            analysisPanel.textContent = [
+                `SIF: ${analysis.sif_potential ? 'Potential' : 'Non-SIF'}`,
+                `Confidence: ${Math.round((analysis.sif_confidence || 0) * 100)}%`,
+                `IOGP rule: ${analysis.iogp_life_saving_rule || 'Not matched'}`,
+                `Energy: ${formatEnergySource(analysis.energy_sources)}`,
+                `Barrier: ${analysis.barrier_condition || 'Not determined'}`,
+                `Rationale: ${analysis.audit_rationale || 'Not available'}`
+            ].join(' | ');
+        }
+
+        await fetchReports();
+        await fetchAnalytics();
+        await fetchKnowledgeGraph();
+    } catch (err) {
+        if (status) {
+            status.className = 'new-report-status error';
+            status.textContent = err.message;
+        }
+    } finally {
+        if (submitButton) submitButton.disabled = false;
+        if (cancelButton) cancelButton.disabled = false;
+    }
+}
+
 // Human-readable verdict labels
 const VERDICT_LABELS = {
-    'SIF_POTENTIAL':       'SIF Precursor — High Risk',
-    'DEFENDED_NEAR_MISS':  'Defended Near-Miss',
+    'SIF_POTENTIAL': 'SIF Precursor — High Risk',
+    'DEFENDED_NEAR_MISS': 'Defended Near-Miss',
     'NON_SIF_OBSERVATION': 'Non-SIF Observation'
 };
 
 // Human-readable barrier condition labels
 const BARRIER_LABELS = {
     'FAILED_OR_ABSENT': 'Absent / Failed',
-    'EFFECTIVE':        'Effective',
-    'COMPROMISED':      'Compromised',
-    'UNKNOWN':          'Not Determined'
+    'EFFECTIVE': 'Effective',
+    'COMPROMISED': 'Compromised',
+    'UNKNOWN': 'Not Determined'
 };
 
 function formatEnergySource(sources) {
@@ -329,14 +530,14 @@ async function fetchAnalytics() {
         // Update KPI cards
         if (analyticsData.summary) {
             const kpiTotal = document.getElementById('kpiTotalReports');
-            const kpiRate  = document.getElementById('kpiSifRate');
-            const kpiSite  = document.getElementById('kpiTopSite');
-            const kpiRule  = document.getElementById('kpiTopRule');
+            const kpiRate = document.getElementById('kpiSifRate');
+            const kpiSite = document.getElementById('kpiTopSite');
+            const kpiRule = document.getElementById('kpiTopRule');
 
             if (kpiTotal) kpiTotal.textContent = analyticsData.summary.total_reports;
-            if (kpiRate)  kpiRate.textContent  = `${analyticsData.summary.sif_rate_pct}%`;
-            if (kpiSite)  kpiSite.textContent  = analyticsData.summary.top_high_risk_site.split(' ')[0];
-            if (kpiRule)  kpiRule.textContent  = analyticsData.summary.top_breached_rule;
+            if (kpiRate) kpiRate.textContent = `${analyticsData.summary.sif_rate_pct}%`;
+            if (kpiSite) kpiSite.textContent = analyticsData.summary.top_high_risk_site.split(' ')[0];
+            if (kpiRule) kpiRule.textContent = analyticsData.summary.top_breached_rule;
         }
 
         renderOverviewCharts(analyticsData);
@@ -355,8 +556,8 @@ async function fetchReports() {
     try {
         const response = await fetch('/api/reports');
         masterReports = await response.json();
-        filteredReports = [...masterReports];
-        renderMasterTable();
+        masterReports.sort(compareReportsNewestFirst);
+        applyTableFilters();
     } catch (err) {
         console.error("Failed to load master reports table:", err);
     }
@@ -472,19 +673,20 @@ function applyTableFilters() {
     const activeBtn = document.querySelector('.filter-btn.active');
     if (!searchInput || !activeBtn) return;
 
-    const searchTerm = searchInput.value.toLowerCase();
+    const searchTerm = searchInput.value.toLowerCase().trim();
     const activeFilter = activeBtn.getAttribute('data-filter');
 
     filteredReports = masterReports.filter(report => {
-        const matchesSearch = 
-            report.report_id.toLowerCase().includes(searchTerm) ||
-            report.site_location.toLowerCase().includes(searchTerm) ||
-            report.description.toLowerCase().includes(searchTerm) ||
-            report.iogp_life_saving_rule.toLowerCase().includes(searchTerm);
+        const matchesSearch = !searchTerm ||
+            (report.report_id && report.report_id.toLowerCase().includes(searchTerm)) ||
+            (report.site_location && report.site_location.toLowerCase().includes(searchTerm)) ||
+            (report.description && report.description.toLowerCase().includes(searchTerm)) ||
+            (report.iogp_life_saving_rule && report.iogp_life_saving_rule.toLowerCase().includes(searchTerm));
 
         let matchesSif = true;
-        if (activeFilter === 'sif') matchesSif = report.sif_potential === 1;
-        if (activeFilter === 'nonsif') matchesSif = report.sif_potential === 0;
+        const isSif = report.sif_potential === 1 || report.sif_potential === '1';
+        if (activeFilter === 'sif') matchesSif = isSif;
+        if (activeFilter === 'nonsif') matchesSif = !isSif;
 
         return matchesSearch && matchesSif;
     });
@@ -498,16 +700,22 @@ function renderMasterTable() {
     tbody.innerHTML = '';
 
     if (filteredReports.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">No matching safety observations found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">No matching safety observations found.</td></tr>`;
         return;
     }
 
     filteredReports.slice(0, 100).forEach(report => {
         const tr = document.createElement('tr');
-        
-        const sifStatus = report.sif_potential === 1 
+
+        const isSif = report.sif_potential === 1 || report.sif_potential === '1';
+        const sifStatus = isSif
             ? `<span class="pill-sif">SIF Potential</span>`
             : `<span class="pill-nonsif">Non-SIF</span>`;
+
+        const canEdit = Boolean(report.is_new_submission || report.can_edit);
+        const actionCell = canEdit
+            ? `<button type="button" class="btn btn-sm btn-secondary edit-report-btn" data-id="${report.report_id}" title="Edit this newly submitted report">Edit</button>`
+            : `<span class="read-only-marker" title="Historical reports are read-only">&mdash;</span>`;
 
         tr.innerHTML = `
             <td><strong>${report.report_id}</strong></td>
@@ -518,6 +726,7 @@ function renderMasterTable() {
             <td>${report.description.substring(0, 85)}...</td>
             <td>${sifStatus}</td>
             <td>${report.iogp_life_saving_rule}</td>
+            <td>${actionCell}</td>
         `;
 
         tbody.appendChild(tr);
@@ -649,7 +858,7 @@ function renderBarrierChart(barrierData) {
                 label: 'Reports',
                 data: values,
                 backgroundColor: colors.slice(0, labels.length).map(c => c + '22'),
-                borderColor:     colors.slice(0, labels.length),
+                borderColor: colors.slice(0, labels.length),
                 borderWidth: 1.5,
                 borderRadius: 5
             }]
@@ -684,14 +893,14 @@ function renderMonthlyTrend(trendData, forecastData = [], forecastSummary = "") 
 
     const histLabels = trendData.map(d => d.month);
     const histTotals = trendData.map(d => d.total);
-    const histSifs   = trendData.map(d => d.sif);
+    const histSifs = trendData.map(d => d.sif);
 
     const forecastLabels = forecastData.map(d => d.month + " (Forecast)");
-    const forecastSifs   = forecastData.map(d => d.sif);
+    const forecastSifs = forecastData.map(d => d.sif);
 
     const allLabels = [...histLabels, ...forecastLabels];
     const histSifSeries = [...histSifs, ...forecastData.map(() => null)];
-    
+
     // Connect historical to forecast
     const forecastSifSeries = [
         ...trendData.map((d, i) => i === trendData.length - 1 ? d.sif : null),
@@ -987,7 +1196,7 @@ async function runClassification() {
                 VERDICT_LABELS[data.dekra_verdict] || data.dekra_verdict;
         }
 
-        const confPct   = Math.round((data.sif_confidence || 0.90) * 100);
+        const confPct = Math.round((data.sif_confidence || 0.90) * 100);
         const riskScore = Math.round((data.sif_severity_score || data.sif_confidence || 0.90) * 100);
 
         const riskNum = document.getElementById('riskScoreNum');
@@ -1000,9 +1209,9 @@ async function runClassification() {
         if (confMeter) confMeter.style.width = `${confPct}%`;
 
         // ── Explainable Contributing Factors ─────────────────────────────
-        const hasEnergy  = data.energy_sources && data.energy_sources.length > 0;
+        const hasEnergy = data.energy_sources && data.energy_sources.length > 0;
         const barrierOut = data.barrier_condition === 'FAILED_OR_ABSENT' || data.barrier_condition === 'COMPROMISED';
-        const isSIF      = data.dekra_verdict === 'SIF_POTENTIAL';
+        const isSIF = data.dekra_verdict === 'SIF_POTENTIAL';
         const isDefended = data.dekra_verdict === 'DEFENDED_NEAR_MISS';
 
         const factors = [
@@ -1043,8 +1252,8 @@ async function runClassification() {
                     <svg class="svg-icon ${f.active ? 'factor-icon-yes' : 'factor-icon-no'}"
                          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         ${f.active
-                            ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
-                            : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
+                    ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+                    : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
                     </svg>
                     <span>${f.text}</span>
                 </li>
@@ -1052,17 +1261,17 @@ async function runClassification() {
         }
 
         // ── Assessment grid ───────────────────────────────────────────────
-        const resRule    = document.getElementById('resRule');
-        const resEnergy  = document.getElementById('resEnergy');
+        const resRule = document.getElementById('resRule');
+        const resEnergy = document.getElementById('resEnergy');
         const resBarrier = document.getElementById('resBarrier');
-        if (resRule)    resRule.textContent    = data.iogp_life_saving_rule || '—';
-        if (resEnergy)  resEnergy.textContent  = formatEnergySource(data.energy_sources);
+        if (resRule) resRule.textContent = data.iogp_life_saving_rule || '—';
+        if (resEnergy) resEnergy.textContent = formatEnergySource(data.energy_sources);
         if (resBarrier) resBarrier.textContent = BARRIER_LABELS[data.barrier_condition] || data.barrier_condition || '—';
 
         // ── Rationale and action plan ─────────────────────────────────────
-        const resRationale  = document.getElementById('resRationale');
+        const resRationale = document.getElementById('resRationale');
         const resActionPlan = document.getElementById('resActionPlan');
-        if (resRationale)  resRationale.textContent  = data.audit_rationale;
+        if (resRationale) resRationale.textContent = data.audit_rationale;
         if (resActionPlan) resActionPlan.textContent = data.oisd_action_plan;
 
         // Feature 15 — Hierarchy of Controls Render

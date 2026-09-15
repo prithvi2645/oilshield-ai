@@ -1592,6 +1592,108 @@ textarea:focus, .corp-input:focus {
    ============================================================ */
 .filter-header { flex-wrap: wrap; gap: var(--space-md); }
 
+.new-report-form {
+    margin-top: 4px;
+}
+
+.new-report-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+}
+
+.new-report-grid > div {
+    min-width: 0;
+}
+
+.new-report-grid .corp-input {
+    width: 100%;
+    margin-top: 5px;
+}
+
+.new-report-wide {
+    grid-column: 1 / -1;
+}
+
+.new-report-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+}
+
+.new-report-status {
+    color: var(--text-muted);
+    font-size: 12.5px;
+}
+
+.new-report-status.success {
+    color: var(--green);
+    font-weight: 600;
+}
+
+.new-report-status.error {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.new-report-analysis {
+    margin-top: var(--space-md);
+    padding: 12px 14px;
+    border: 1px solid var(--green-border);
+    border-left: 4px solid var(--green);
+    background: var(--green-bg);
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+
+.editing-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.editing-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--amber);
+    background: var(--amber-light);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--radius-sm);
+}
+
+.read-only-marker {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.edit-report-btn {
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+
+@media (max-width: 720px) {
+    .new-report-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .new-report-wide {
+        grid-column: auto;
+    }
+
+    .new-report-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
 .search-filter-controls {
     display: flex;
     align-items: center;

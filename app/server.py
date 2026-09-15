@@ -1,6 +1,8 @@
 import os
+import re
 import sys
 import json
+import tempfile
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import pandas as pd
@@ -15,6 +17,101 @@ except ModuleNotFoundError:
     from nlp_engine import SafetyClassifierPipeline
 
 from sklearn.metrics.pairwise import cosine_similarity
+
+REPORT_COLUMNS = [
+    "report_id",
+    "date",
+    "site_location",
+    "department",
+    "report_type",
+    "report_title",
+    "description",
+    "sif_potential",
+    "sif_severity_score",
+    "iogp_life_saving_rule",
+    "barrier_failure_type",
+    "precursor_pattern",
+    "activity_being_performed",
+    "immediate_corrective_action",
+]
+
+REPORT_TYPES = {"Unsafe Act", "Unsafe Condition", "Near Miss", "Incident Report"}
+REQUIRED_REPORT_FIELDS = {
+    "date",
+    "site_location",
+    "department",
+    "report_type",
+    "report_title",
+    "description",
+    "activity_being_performed",
+}
+MAX_REPORT_FIELD_LENGTH = 2000
+SUBMITTED_REPORTS_METADATA_FILE = os.path.abspath("data/submitted_reports_metadata.json")
+
+def load_submitted_reports_metadata():
+    if os.path.isfile(SUBMITTED_REPORTS_METADATA_FILE):
+        try:
+            with open(SUBMITTED_REPORTS_METADATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+
+    metadata = {}
+    csv_path = os.path.abspath("data/oil_safety_reports.csv")
+    if os.path.isfile(csv_path):
+        try:
+            df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+            baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
+            historical_ids = set()
+            if os.path.isfile(baseline_path):
+                b_df = pd.read_csv(baseline_path, dtype=str, keep_default_na=False)
+                historical_ids = set(b_df["report_id"].astype(str))
+            else:
+                historical_ids = {f"OIL-HSE-2025-{i}" for i in range(1001, 1501)}
+
+            for r_id in df["report_id"].astype(str):
+                if r_id and r_id not in historical_ids:
+                    metadata[r_id] = {
+                        "report_id": r_id,
+                        "created_via": "new_report_submission",
+                        "is_new_submission": True,
+                    }
+        except Exception:
+            pass
+
+    save_submitted_reports_metadata(metadata)
+    return metadata
+
+def save_submitted_reports_metadata(metadata):
+    temp_path = None
+    try:
+        os.makedirs(os.path.dirname(SUBMITTED_REPORTS_METADATA_FILE), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            suffix=".json",
+            dir=os.path.dirname(SUBMITTED_REPORTS_METADATA_FILE),
+            delete=False,
+        ) as temp_file:
+            temp_path = temp_file.name
+            json.dump(metadata, temp_file, indent=2)
+        os.replace(temp_path, SUBMITTED_REPORTS_METADATA_FILE)
+        temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+def is_newly_submitted_report(report_id, row=None):
+    if not report_id:
+        return False
+    if row is not None:
+        if "is_new_submission" in row and str(row["is_new_submission"]).strip().lower() in {"1", "true", "yes"}:
+            return True
+    metadata = load_submitted_reports_metadata()
+    return report_id in metadata
 
 # Initialize AI Pipeline & Pre-compute Dataset Vectors for Similarity Search
 pipeline = SafetyClassifierPipeline()
@@ -76,6 +173,13 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             
             self.serve_file(local_file, mime)
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_POST(self):
         if self.path == "/api/classify":
             content_length = int(self.headers.get('Content-Length', 0))
@@ -88,6 +192,38 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json_response(result)
             except Exception as e:
                 self.send_json_response({"error": str(e)}, status=400)
+        elif self.path == "/api/reports":
+            try:
+                data = self.read_json_body()
+                created_report, analysis = self.create_report(data)
+                self.send_json_response({
+                    "success": True,
+                    "report": created_report,
+                    "analysis": analysis,
+                }, status=201)
+            except ValueError as e:
+                self.send_json_response({"error": str(e)}, status=400)
+            except Exception as e:
+                self.send_json_response({"error": f"Unable to save report: {e}"}, status=500)
+        elif re.fullmatch(r"/api/reports/([^/]+)", self.path):
+            match = re.fullmatch(r"/api/reports/([^/]+)", self.path)
+            url_report_id = match.group(1)
+            try:
+                data = self.read_json_body()
+                updated_report, analysis = self.update_report(url_report_id, data)
+                self.send_json_response({
+                    "success": True,
+                    "report": updated_report,
+                    "analysis": analysis,
+                }, status=200)
+            except LookupError as e:
+                self.send_json_response({"error": str(e)}, status=404)
+            except PermissionError as e:
+                self.send_json_response({"error": str(e)}, status=403)
+            except ValueError as e:
+                self.send_json_response({"error": str(e)}, status=400)
+            except Exception as e:
+                self.send_json_response({"error": f"Unable to update report: {e}"}, status=500)
         elif self.path == "/api/similar":
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
@@ -101,6 +237,275 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json_response({"error": str(e)}, status=400)
         else:
             self.send_error(404, "Endpoint not found")
+
+    def do_PUT(self):
+        parsed_path = urllib.parse.urlparse(self.path)
+        req_path = parsed_path.path
+
+        match = re.fullmatch(r"/api/reports(?:/([^/]+))?", req_path)
+        if match:
+            url_report_id = match.group(1)
+            try:
+                data = self.read_json_body()
+                report_id = url_report_id or data.get("report_id") or data.get("edit_report_id")
+                if not report_id:
+                    self.send_json_response({"error": "Report ID is required."}, status=400)
+                    return
+                updated_report, analysis = self.update_report(report_id, data)
+                self.send_json_response({
+                    "success": True,
+                    "report": updated_report,
+                    "analysis": analysis,
+                }, status=200)
+            except LookupError as e:
+                self.send_json_response({"error": str(e)}, status=404)
+            except PermissionError as e:
+                self.send_json_response({"error": str(e)}, status=403)
+            except ValueError as e:
+                self.send_json_response({"error": str(e)}, status=400)
+            except Exception as e:
+                self.send_json_response({"error": f"Unable to update report: {e}"}, status=500)
+        else:
+            self.send_error(404, "Endpoint not found")
+
+    def read_json_body(self):
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            raise ValueError("Invalid Content-Length header.")
+
+        if content_length <= 0:
+            raise ValueError("Request body is required.")
+        if content_length > 100_000:
+            raise ValueError("Request body is too large.")
+
+        try:
+            post_data = self.rfile.read(content_length).decode("utf-8")
+            data = json.loads(post_data)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Request body must contain valid UTF-8 JSON.")
+
+        if not isinstance(data, dict):
+            raise ValueError("Request body must be a JSON object.")
+        return data
+
+    def create_report(self, data):
+        if not REQUIRED_REPORT_FIELDS.issubset(data):
+            missing = sorted(REQUIRED_REPORT_FIELDS - set(data))
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+        report = {}
+        for field in REPORT_COLUMNS:
+            if field in {"report_id", "sif_potential", "sif_severity_score", "iogp_life_saving_rule"}:
+                continue
+            value = data.get(field, "")
+            if not isinstance(value, str):
+                raise ValueError(f"Field '{field}' must be text.")
+            value = value.strip()
+            if field in REQUIRED_REPORT_FIELDS and not value:
+                raise ValueError(f"Field '{field}' cannot be empty.")
+            if len(value) > MAX_REPORT_FIELD_LENGTH:
+                raise ValueError(f"Field '{field}' is too long.")
+            report[field] = value
+
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report["date"]):
+            raise ValueError("Field 'date' must use YYYY-MM-DD format.")
+        try:
+            pd.to_datetime(report["date"], format="%Y-%m-%d", errors="raise")
+        except (TypeError, ValueError):
+            raise ValueError("Field 'date' must be a valid calendar date.")
+        if report["report_type"] not in REPORT_TYPES:
+            raise ValueError("Field 'report_type' must be an existing report type.")
+
+        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        if not os.path.isfile(csv_path):
+            raise ValueError("Safety report dataset was not found.")
+
+        current_df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        if list(current_df.columns) != REPORT_COLUMNS:
+            raise ValueError("Safety report CSV schema does not match the expected columns.")
+
+        original_ids = set(current_df["report_id"].astype(str))
+        id_matches = [
+            re.fullmatch(r"(.+?)(\d+)$", report_id)
+            for report_id in original_ids
+        ]
+        if not id_matches or any(match is None for match in id_matches):
+            raise ValueError("Existing report IDs do not use a supported format.")
+
+        prefix = id_matches[0].group(1)
+        if any(match.group(1) != prefix for match in id_matches):
+            raise ValueError("Existing report IDs use inconsistent prefixes.")
+
+        next_suffix = max(int(match.group(2)) for match in id_matches) + 1
+        new_id = f"{prefix}{next_suffix:04d}"
+        if new_id in original_ids:
+            raise ValueError("Generated report ID already exists.")
+
+        analysis = pipeline.predict(report["description"])
+        if not isinstance(analysis, dict) or analysis.get("error"):
+            raise ValueError(analysis.get("error", "AI analysis did not return a valid result."))
+
+        report["report_id"] = new_id
+        report["sif_potential"] = str(int(analysis.get("sif_potential", 0)))
+        report["sif_severity_score"] = str(float(analysis.get("sif_confidence", 0.0)))
+        report["iogp_life_saving_rule"] = str(analysis.get("iogp_life_saving_rule", "None / Housekeeping"))
+
+        new_row = pd.DataFrame([[report[column] for column in REPORT_COLUMNS]], columns=REPORT_COLUMNS)
+        updated_df = pd.concat([current_df, new_row], ignore_index=True)
+        if len(updated_df) != len(current_df) + 1:
+            raise ValueError("Report row-count validation failed.")
+        if not set(current_df["report_id"]).issubset(set(updated_df["report_id"])):
+            raise ValueError("Existing report ID preservation check failed.")
+        if updated_df["report_id"].duplicated().any():
+            raise ValueError("Report ID uniqueness check failed.")
+
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                suffix=".csv",
+                dir=os.path.dirname(csv_path),
+                delete=False,
+            ) as temp_file:
+                temp_path = temp_file.name
+                updated_df.to_csv(temp_file, index=False)
+
+            written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
+            if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
+                raise ValueError("Written CSV validation failed.")
+            os.replace(temp_path, csv_path)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        metadata = load_submitted_reports_metadata()
+        metadata[new_id] = {
+            "report_id": new_id,
+            "created_at": pd.Timestamp.now().isoformat(),
+            "is_new_submission": True,
+        }
+        save_submitted_reports_metadata(metadata)
+
+        init_dataset_search()
+        result_report = {column: report[column] for column in REPORT_COLUMNS}
+        result_report["is_new_submission"] = True
+        result_report["can_edit"] = True
+        return result_report, analysis
+
+    def update_report(self, report_id, data):
+        if not isinstance(report_id, str) or not re.fullmatch(r"OIL-HSE-\d{4}-\d+", report_id):
+            raise ValueError("Invalid report ID format.")
+
+        if not isinstance(data, dict):
+            raise ValueError("Request body must be a JSON object.")
+
+        # Modifying report_id is not permitted
+        if "report_id" in data and str(data["report_id"]).strip() and str(data["report_id"]).strip() != report_id:
+            raise ValueError("Modifying report_id is not permitted.")
+        if "edit_report_id" in data and str(data["edit_report_id"]).strip() and str(data["edit_report_id"]).strip() != report_id:
+            raise ValueError("Modifying report_id is not permitted.")
+
+        if not REQUIRED_REPORT_FIELDS.issubset(data):
+            missing = sorted(REQUIRED_REPORT_FIELDS - set(data))
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
+        report = {}
+        for field in REPORT_COLUMNS:
+            if field in {"report_id", "sif_potential", "sif_severity_score", "iogp_life_saving_rule"}:
+                continue
+            value = data.get(field, "")
+            if not isinstance(value, str):
+                raise ValueError(f"Field '{field}' must be text.")
+            value = value.strip()
+            if field in REQUIRED_REPORT_FIELDS and not value:
+                raise ValueError(f"Field '{field}' cannot be empty.")
+            if len(value) > MAX_REPORT_FIELD_LENGTH:
+                raise ValueError(f"Field '{field}' is too long.")
+            report[field] = value
+
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report["date"]):
+            raise ValueError("Field 'date' must use YYYY-MM-DD format.")
+        try:
+            pd.to_datetime(report["date"], format="%Y-%m-%d", errors="raise")
+        except (TypeError, ValueError):
+            raise ValueError("Field 'date' must be a valid calendar date.")
+        if report["report_type"] not in REPORT_TYPES:
+            raise ValueError("Field 'report_type' must be an existing report type.")
+
+        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        if not os.path.isfile(csv_path):
+            raise ValueError("Safety report dataset was not found.")
+
+        current_df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        if list(current_df.columns) != REPORT_COLUMNS:
+            raise ValueError("Safety report CSV schema does not match the expected columns.")
+
+        matching_indices = current_df.index[current_df["report_id"] == report_id].tolist()
+        if not matching_indices:
+            raise LookupError(f"Report '{report_id}' was not found.")
+        row_idx = matching_indices[0]
+        existing_row = current_df.iloc[row_idx].to_dict()
+
+        if not is_newly_submitted_report(report_id, existing_row):
+            raise PermissionError(f"Historical report '{report_id}' is read-only and cannot be edited.")
+
+        # Run AI re-analysis on the corrected description using the EXISTING pipeline
+        analysis = pipeline.predict(report["description"])
+        if not isinstance(analysis, dict) or analysis.get("error"):
+            raise ValueError(analysis.get("error", "AI analysis did not return a valid result."))
+
+        report["report_id"] = report_id
+        report["sif_potential"] = str(int(analysis.get("sif_potential", 0)))
+        report["sif_severity_score"] = str(float(analysis.get("sif_confidence", 0.0)))
+        report["iogp_life_saving_rule"] = str(analysis.get("iogp_life_saving_rule", "None / Housekeeping"))
+
+        updated_df = current_df.copy()
+        for col in REPORT_COLUMNS:
+            updated_df.at[row_idx, col] = report[col]
+
+        if len(updated_df) != len(current_df):
+            raise ValueError("Report row-count validation failed.")
+        if not set(current_df["report_id"]).issubset(set(updated_df["report_id"])):
+            raise ValueError("Existing report ID preservation check failed.")
+        if updated_df["report_id"].duplicated().any():
+            raise ValueError("Report ID uniqueness check failed.")
+
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                suffix=".csv",
+                dir=os.path.dirname(csv_path),
+                delete=False,
+            ) as temp_file:
+                temp_path = temp_file.name
+                updated_df.to_csv(temp_file, index=False)
+
+            written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
+            if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
+                raise ValueError("Written CSV validation failed.")
+            os.replace(temp_path, csv_path)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        metadata = load_submitted_reports_metadata()
+        if report_id in metadata:
+            metadata[report_id]["updated_at"] = pd.Timestamp.now().isoformat()
+            save_submitted_reports_metadata(metadata)
+
+        init_dataset_search()
+        result_report = {column: report[column] for column in REPORT_COLUMNS}
+        result_report["is_new_submission"] = True
+        result_report["can_edit"] = True
+        return result_report, analysis
 
     def serve_csv_download(self):
         csv_path = os.path.abspath("data/oil_safety_reports.csv")
@@ -130,6 +535,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(json.dumps(data, indent=2).encode('utf-8'))
 
@@ -146,10 +553,21 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             self.send_error(404, f"File {rel_path} not found at {abs_path}")
 
     def get_reports(self):
-        json_path = "data/oil_safety_reports.json"
-        if os.path.exists(json_path):
-            with open(json_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+        csv_path = "data/oil_safety_reports.csv"
+        if os.path.exists(csv_path):
+            records = pd.read_csv(csv_path, keep_default_na=False).to_dict(orient="records")
+            metadata = load_submitted_reports_metadata()
+            for r in records:
+                r_id = str(r.get("report_id", ""))
+                is_new = is_newly_submitted_report(r_id, r)
+                r["is_new_submission"] = is_new
+                r["can_edit"] = is_new
+                if "sif_potential" in r:
+                    try:
+                        r["sif_potential"] = int(r["sif_potential"])
+                    except (ValueError, TypeError):
+                        pass
+            return records
         return []
 
     def get_similar_reports(self, query_text: str, top_k=5):
@@ -335,7 +753,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "severity_buckets": severity_buckets
         }
 
-def run_server(port=8080):
+def run_server(port=8081):
     os.makedirs("public", exist_ok=True)
     server_address = ('', port)
     httpd = HTTPServer(server_address, SafetyDashboardHandler)

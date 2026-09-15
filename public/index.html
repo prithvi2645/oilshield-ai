@@ -918,19 +918,96 @@
              TAB: REPORTS DATABASE
         ============================================================ -->
         <div class="tab-content" id="tab-explorer">
+            <div class="corp-card" id="newReportCard">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <h2 id="reportFormTitle">Add New HSE Safety Report</h2>
+                        <p class="desc" id="reportFormDesc">Submit a new observation for existing SIF and IOGP analysis.</p>
+                    </div>
+                    <div id="editingModeIndicator" class="editing-indicator" style="display: none;">
+                        <span class="editing-badge">Editing Mode: <strong id="editingReportIdDisplay"></strong></span>
+                    </div>
+                </div>
+                <form id="newReportForm" class="new-report-form">
+                    <input type="hidden" id="editReportId" name="edit_report_id" value="">
+                    <div class="new-report-grid">
+                        <div>
+                            <label class="field-label" for="newReportDate">Date</label>
+                            <input class="corp-input" id="newReportDate" name="date" type="date" required>
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportSite">Site location</label>
+                            <input class="corp-input" id="newReportSite" name="site_location" type="text"
+                                maxlength="200" required>
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportDepartment">Department</label>
+                            <input class="corp-input" id="newReportDepartment" name="department" type="text"
+                                maxlength="200" required>
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportType">Report type</label>
+                            <select class="corp-input" id="newReportType" name="report_type" required>
+                                <option value="">Select report type</option>
+                                <option>Unsafe Act</option>
+                                <option>Unsafe Condition</option>
+                                <option>Near Miss</option>
+                                <option>Incident Report</option>
+                            </select>
+                        </div>
+                        <div class="new-report-wide">
+                            <label class="field-label" for="newReportTitle">Report title</label>
+                            <input class="corp-input" id="newReportTitle" name="report_title" type="text"
+                                maxlength="200" required>
+                        </div>
+                        <div class="new-report-wide">
+                            <label class="field-label" for="newReportDescription">Description</label>
+                            <textarea class="corp-input" id="newReportDescription" name="description" rows="4"
+                                maxlength="2000" required></textarea>
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportActivity">Activity being performed</label>
+                            <input class="corp-input" id="newReportActivity" name="activity_being_performed" type="text"
+                                maxlength="200" required>
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportBarrier">Barrier failure type</label>
+                            <input class="corp-input" id="newReportBarrier" name="barrier_failure_type" type="text"
+                                maxlength="200">
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportPattern">Precursor pattern</label>
+                            <input class="corp-input" id="newReportPattern" name="precursor_pattern" type="text"
+                                maxlength="200">
+                        </div>
+                        <div>
+                            <label class="field-label" for="newReportAction">Immediate corrective action</label>
+                            <input class="corp-input" id="newReportAction" name="immediate_corrective_action"
+                                type="text" maxlength="2000">
+                        </div>
+                    </div>
+                    <div class="new-report-actions">
+                        <button class="btn btn-primary" id="submitNewReportBtn" type="submit">Add New Report</button>
+                        <button class="btn btn-secondary" id="cancelEditReportBtn" type="button" style="display: none;">Cancel Edit</button>
+                        <span id="newReportStatus" class="new-report-status" role="status"></span>
+                    </div>
+                    <div id="newReportAnalysis" class="new-report-analysis" hidden></div>
+                </form>
+            </div>
+
             <div class="corp-card">
                 <div class="card-title filter-header">
                     <div>
                         <h2>Safety Reports Database</h2>
-                        <p class="desc">Full record of all 500 observations — searchable by site, report ID, or keyword. Export for OISD statutory audit.</p>
+                        <p class="desc">Current report records — searchable by site, report ID, or keyword. Export for OISD statutory audit.</p>
                     </div>
 
                     <div class="search-filter-controls">
                         <input type="text" id="explorerSearch" placeholder="Search by site, ID, keyword&hellip;" class="corp-input">
                         <div class="btn-group">
-                            <button class="filter-btn active" data-filter="all">All (500)</button>
-                            <button class="filter-btn" data-filter="sif">SIF Precursors (116)</button>
-                            <button class="filter-btn" data-filter="nonsif">Non-SIF (384)</button>
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="sif">SIF Precursors</button>
+                            <button class="filter-btn" data-filter="nonsif">Non-SIF</button>
                         </div>
                     </div>
                 </div>
@@ -947,6 +1024,7 @@
                                 <th>Observation</th>
                                 <th>Classification</th>
                                 <th>IOGP Rule</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="masterExplorerBody">
