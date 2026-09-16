@@ -159,7 +159,6 @@ def analyze_incident(text: str) -> Dict[str, Any]:
         priority = "MODERATE"
         explanation = f"High-energy source ({', '.join(detected_energies)}) present, but protective barrier successfully contained the energy."
     elif is_high_energy:
-        # High energy present, barrier state implicit/unknown
         classification = "SIF_POTENTIAL"
         priority = "HIGH"
         explanation = f"High-energy source ({', '.join(detected_energies)}) detected. Barrier integrity unconfirmed on site."
@@ -172,8 +171,12 @@ def analyze_incident(text: str) -> Dict[str, Any]:
         priority = "LOW"
         explanation = "Absence of fatal-energy mechanisms or standard low-severity operational observation."
 
-    # Default IOGP Rule mapping fallback
-    primary_rule = list(matched_rules)[0] if matched_rules else "None / General Safety"
+    primary_rule = list(matched_rules)[0] if matched_rules else "General Safety"
+
+    is_sif_bool = classification in ["SIF_POTENTIAL"]
+    sev_estimate = 0.85 if is_sif_bool else (0.45 if priority == "MODERATE" else 0.20)
+    risk_info = compute_report_risk_score(is_sif_bool, sev_estimate, is_high_energy)
+    hierarchy = get_hierarchy_of_controls(primary_rule, barrier_status, text)
 
     return {
         "input_text": text,
@@ -181,12 +184,129 @@ def analyze_incident(text: str) -> Dict[str, Any]:
         "entities_extracted": entities,
         "classification": classification,
         "priority": priority,
-        "is_sif_potential": classification in ["SIF_POTENTIAL"],
+        "priority_tier": risk_info["priority_tier"],
+        "risk_pct": risk_info["risk_pct"],
+        "is_sif_potential": is_sif_bool,
         "primary_iogp_rule": primary_rule,
         "detected_energy_sources": detected_energies,
         "barrier_condition": barrier_status,
         "has_zero_energy_verification": has_zero_energy_verification,
+        "hierarchy_of_controls": hierarchy,
         "audit_rationale": explanation
+    }
+
+def compute_report_risk_score(sif_potential: bool, severity_score: float, is_high_energy: bool = False) -> Dict[str, Any]:
+    """
+    Computes exact Risk % Score (0–100%) and SIF Priority Tier (P1 to P4).
+    """
+    try:
+        sev = float(severity_score) if severity_score is not None else 0.0
+    except (ValueError, TypeError):
+        sev = 0.0
+
+    sif_val = 1.0 if (sif_potential is True or sif_potential == 1 or sif_potential == "1") else 0.0
+    energy_val = 1.0 if is_high_energy else 0.0
+
+    # Risk Score Algorithm
+    raw_score = (sif_val * 45.0) + (sev * 45.0) + (energy_val * 10.0)
+    risk_pct = round(min(100.0, max(5.0, raw_score)), 1)
+
+    # Priority Tier
+    if risk_pct >= 75.0 or (sif_val == 1.0 and energy_val == 1.0):
+        priority_tier = "P1 Critical"
+        resolution_sla = "Immediate 4-Hour Emergency Stop & Leadership Escalation"
+    elif risk_pct >= 50.0 or sif_val == 1.0:
+        priority_tier = "P2 High"
+        resolution_sla = "24-Hour Mandatory Remediation & Barrier Verification"
+    elif risk_pct >= 30.0:
+        priority_tier = "P3 Moderate"
+        resolution_sla = "7-Day Action Plan & Department Safety Audit"
+    else:
+        priority_tier = "P4 Low"
+        resolution_sla = "Routine Shift Maintenance & General Housekeeping"
+
+    return {
+        "risk_pct": risk_pct,
+        "priority_tier": priority_tier,
+        "resolution_sla": resolution_sla
+    }
+
+def get_hierarchy_of_controls(iogp_rule: str, barrier_type: str = "", hazard_text: str = "") -> Dict[str, str]:
+    """
+    Generates structured corrective action recommendations based on the OSHA / ISO 45001 Hierarchy of Controls.
+    """
+    rule = iogp_rule or "General Safety"
+
+    controls_db = {
+        "Work at Height": {
+            "elimination": "Eliminate aloft work by assembling structures, pipe brackets, and light fixtures at ground level before hoisting.",
+            "substitution": "Replace temporary wooden scaffolding or step-ladders with certified self-propelled hydraulic aerial work platforms.",
+            "engineering": "Install permanent perimeter guardrails (100cm height), toe-boards, double-rigged inertia reel lifelines, and safety netting.",
+            "administrative": "Mandate 100% Permit to Work (PTW), pre-job toolbox talks, daily harness inspection, and certified scaffolding tags.",
+            "ppe": "Equip personnel with EN 361 full-body safety harnesses with double lanyards, shock absorbers, and chin-strap helmets."
+        },
+        "Energy Isolation": {
+            "elimination": "Redesign piping systems to install permanent double-block-and-bleed (DBB) isolation valves.",
+            "substitution": "Replace manual mechanical lockout pins with key-coded pneumatic/electrical interlock safety systems.",
+            "engineering": "Install tamper-proof LOTO key boxes, lockable circuit breakers, and calibrated digital zero-energy bleed gauges.",
+            "administrative": "Execute mandatory LOTO zero-voltage/zero-pressure verification logs countersigned by two certified shift engineers.",
+            "ppe": "Provide arc-flash rated face shields, dielectric gloves, and flame-retardant anti-static coveralls during electrical racking."
+        },
+        "Line of Fire": {
+            "elimination": "Re-route high-pressure lines and heavy mechanical hoist paths away from active personnel walkways.",
+            "substitution": "Use automated remote-operated hydraulic casing tongs and whip-check cables instead of manual pipe wrenches.",
+            "engineering": "Install heavy-duty steel whip-restraints on Chiksan lines, safety shields on rotating shafts, and load-sensing crane interlocks.",
+            "administrative": "Enforce strict red-zone exclusion barrier tape around active lifting and pressure testing operations.",
+            "ppe": "Issue heavy-duty impact-resistant mechanics gloves, steel-toed boots, and high-visibility reflective vests."
+        },
+        "Hot Work": {
+            "elimination": "Utilize cold-cutting tools, mechanical flange clamps, or bolt-on connections to eliminate open flame welding.",
+            "substitution": "Substitute solvent-based flammable degreasers with non-combustible water-based ultrasonic cleaning agents.",
+            "engineering": "Deploy continuous LEL/H2S dual-gas monitors with automated ESD interlocks and portable fire blankets.",
+            "administrative": "Require mandatory Hot Work PTW, continuous fire-watch attendant for 30 minutes post-work, and sniffer testing.",
+            "ppe": "Supply leather welding aprons, welding helmets with shade 10-12 auto-darkening filters, and SCBA standby apparatus."
+        }
+    }
+
+    fallback = {
+        "elimination": "Remove the physical hazard source or de-energize equipment completely before starting work.",
+        "substitution": "Replace high-hazard tools, high-pressure fittings, or toxic chemicals with safer certified alternatives.",
+        "engineering": "Install physical safety guards, automatic ESD interlocks, pressure relief valves, and barrier covers.",
+        "administrative": "Enforce Job Safety Analysis (JSA), Permit to Work (PTW), pre-job safety briefings, and standard operating procedures.",
+        "ppe": "Mandate mandatory certified PPE (helmets, safety boots, safety glasses, anti-impact gloves, and respiratory gear)."
+    }
+
+    return controls_db.get(rule, fallback)
+
+def simulate_barrier_impact(incident_text: str, barrier_removed: str) -> Dict[str, Any]:
+    """
+    Safety Simulator: Computes simulated risk escalation when a specific safety barrier is removed.
+    """
+    base_analysis = analyze_incident(incident_text)
+    base_risk = base_analysis["risk_pct"]
+
+    removal_impacts = {
+        "loto": {"name": "Lockout Tagout (LOTO) Energy Isolation", "risk_delta": 42.0, "escalated_sif": True, "escalated_rule": "Energy Isolation"},
+        "scba": {"name": "SCBA / Toxic Gas Atmospheric Monitor", "risk_delta": 38.0, "escalated_sif": True, "escalated_rule": "Confined Space"},
+        "fall_protection": {"name": "Fall Lifeline & Harness Protection", "risk_delta": 45.0, "escalated_sif": True, "escalated_rule": "Work at Height"},
+        "esd_interlock": {"name": "Emergency Shutdown System (ESD)", "risk_delta": 50.0, "escalated_sif": True, "escalated_rule": "Bypassing Safety Controls"},
+        "whip_check": {"name": "Chiksan Line Whip-Check Safety Cable", "risk_delta": 35.0, "escalated_sif": True, "escalated_rule": "Line of Fire"}
+    }
+
+    impact = removal_impacts.get(barrier_removed.lower(), {"name": barrier_removed, "risk_delta": 25.0, "escalated_sif": True, "escalated_rule": "General Safety"})
+
+    simulated_risk = min(100.0, base_risk + impact["risk_delta"])
+    simulated_priority = "P1 Critical" if simulated_risk >= 75.0 else ("P2 High" if simulated_risk >= 50.0 else "P3 Moderate")
+
+    return {
+        "original_risk_pct": base_risk,
+        "simulated_risk_pct": simulated_risk,
+        "risk_increase_delta": round(impact["risk_delta"], 1),
+        "removed_barrier": impact["name"],
+        "base_priority": base_analysis["priority_tier"],
+        "simulated_priority": simulated_priority,
+        "escalated_sif": impact["escalated_sif"],
+        "consequence_summary": f"CRITICAL ESCALATION: Removing '{impact['name']}' increases SIF risk from {base_risk}% to {simulated_risk}%. Potential catastrophic asset failure or fatality."
     }
 
 if __name__ == "__main__":

@@ -11,9 +11,19 @@ let monthlyTrendChartInstance = null;
 let analyticsData = null;
 let pendingDeleteReportId = null;
 
+function getChartColors() {
+    const isDark = document.body.classList.contains('dark-mode');
+    return {
+        tickColor: isDark ? '#CBD5E1' : '#475569',
+        gridColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+        legendColor: isDark ? '#F1F5F9' : '#334155'
+    };
+}
+
 let currentRole = 'hse_manager';
 
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initRoleControl();
     initHeroCarousel();
     setupTabNavigation();
@@ -49,14 +59,8 @@ function initRoleControl() {
 
     const confirmBtn = document.getElementById('confirmRoleBtn');
     if (confirmBtn) {
-        confirmBtn.addEventListener('click', () => {
-            const activeRoleBtn = document.querySelector('.role-card-btn.active');
-            if (activeRoleBtn) {
-                currentRole = activeRoleBtn.getAttribute('data-role');
-                sessionStorage.setItem('oil_hsse_user_role', currentRole);
-                if (modal) modal.style.display = 'none';
-                applyRoleAccess(currentRole);
-            }
+        confirmBtn.addEventListener('click', (e) => {
+            handleLoginSubmit(e);
         });
     }
 
@@ -68,6 +72,48 @@ function initRoleControl() {
         });
     }
 }
+
+window.autofillRoleCredentials = function(role) {
+    selectRoleCard(role);
+    const emailInput = document.getElementById('loginEmail');
+    const passInput = document.getElementById('loginPass');
+    if (role === 'hse_manager') {
+        if (emailInput) emailInput.value = 'director.hse@oilindia.in';
+        if (passInput) passInput.value = 'HSE_Corporate_2025!';
+    } else if (role === 'site_manager') {
+        if (emailInput) emailInput.value = 'risk.officer@oilindia.in';
+        if (passInput) passInput.value = 'SiteRisk_Baghjan#5';
+    } else if (role === 'supervisor') {
+        if (emailInput) emailInput.value = 'inspector.duliajan@oilindia.in';
+        if (passInput) passInput.value = 'FieldInspector_Duliajan';
+    } else if (role === 'analyst') {
+        if (emailInput) emailInput.value = 'analyst.audit@oilindia.in';
+        if (passInput) passInput.value = 'Auditor_Data_2025!';
+    }
+};
+
+window.selectRoleCard = function(role) {
+    document.querySelectorAll('.role-card-btn').forEach(b => {
+        if (b.getAttribute('data-role') === role) {
+            b.classList.add('active');
+        } else {
+            b.classList.remove('active');
+        }
+    });
+};
+
+window.handleLoginSubmit = function(e) {
+    if (e) e.preventDefault();
+    const activeRoleBtn = document.querySelector('.role-card-btn.active');
+    const selectedRole = activeRoleBtn ? activeRoleBtn.getAttribute('data-role') : 'hse_manager';
+    currentRole = selectedRole;
+    sessionStorage.setItem('oil_hsse_user_role', currentRole);
+    const modal = document.getElementById('roleModalOverlay');
+    if (modal) modal.style.display = 'none';
+    applyRoleAccess(currentRole);
+    showToast(`Logged in successfully as ${getRoleDisplayName(currentRole)}`, 'success');
+};
+
 
 // ============================================================
 // HERO CAROUSEL SLIDESHOW
@@ -452,6 +498,44 @@ function cancelEditingReport() {
         status.textContent = '';
     }
     if (analysisPanel) analysisPanel.hidden = true;
+
+    const simBox = document.getElementById('uploadSimilarRetrievalBox');
+    if (simBox) simBox.style.display = 'none';
+}
+
+let uploadSearchDebounce = null;
+function checkSimilarOnUpload(text) {
+    clearTimeout(uploadSearchDebounce);
+    const box = document.getElementById('uploadSimilarRetrievalBox');
+    const listEl = document.getElementById('uploadSimilarList');
+    if (!text || text.trim().length < 15) {
+        if (box) box.style.display = 'none';
+        return;
+    }
+
+    uploadSearchDebounce = setTimeout(async () => {
+        try {
+            const response = await fetch('/api/similar-retrieval', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const data = await response.json();
+            const matches = data.similar_retrieval || [];
+            if (matches.length > 0 && box && listEl) {
+                listEl.innerHTML = matches.map(m => `
+                    <div style="font-size:10px; color:#cbd5e1; background:rgba(15,23,42,0.6); padding:4px 8px; border-radius:4px;">
+                        <strong style="color:#38bdf8;">${m.report_id}</strong> (${m.similarity_score}% match): ${m.report_title} &bull; <span style="color:#f59e0b;">${m.iogp_rule}</span>
+                    </div>
+                `).join('');
+                box.style.display = 'block';
+            } else if (box) {
+                box.style.display = 'none';
+            }
+        } catch (err) {
+            console.error("Failed real-time upload retrieval:", err);
+        }
+    }, 400);
 }
 
 function openDeleteModal(reportId) {
@@ -672,6 +756,7 @@ async function fetchAnalytics() {
         renderPrecursorAlerts(analyticsData.top_precursors || []);
         renderSeverityDonutChart(analyticsData.severity_buckets || {});
         renderMonthlyTrend(analyticsData.monthly_trend || [], analyticsData.forecast_data || [], analyticsData.forecast_summary);
+        fetchPredictiveRisk();
 
     } catch (err) {
         console.error('Failed to load analytics data:', err);
@@ -684,6 +769,8 @@ async function fetchReports() {
         masterReports = await response.json();
         masterReports.sort(compareReportsNewestFirst);
         applyTableFilters();
+        renderRiskMatrix(masterReports);
+        populateClassifierDatasetDropdown();
     } catch (err) {
         console.error("Failed to load master reports table:", err);
     }
@@ -692,106 +779,514 @@ async function fetchReports() {
 // ============================================================
 // FEATURE 7 — SAFETY KNOWLEDGE GRAPH (D3.JS V7 FORCE LAYOUT)
 // ============================================================
+// ============================================================
+// FEATURE 7 — SAFETY KNOWLEDGE MIND MAP & RELATIONAL FLOWCHART (NOTEBOOKLM STYLE)
+// ============================================================
+let currentKgData = null;
+let currentKgLayoutMode = 'mindmap'; // 'mindmap', 'flowchart', 'force'
+let kgZoomBehavior = null;
+let kgSvgSelection = null;
+let kgContainerGroup = null;
+let activeKgSimulation = null;
+let currentKgSearchQuery = '';
+
 async function fetchKnowledgeGraph() {
     try {
         const response = await fetch('/api/knowledge-graph');
-        const graphData = await response.json();
-        renderKnowledgeGraph(graphData);
+        currentKgData = await response.json();
+        renderKnowledgeGraph();
     } catch (err) {
         console.error("Failed to load knowledge graph data:", err);
     }
 }
 
-function renderKnowledgeGraph(graphData) {
-    const svgEl = document.getElementById('knowledgeGraphSvg');
-    if (!svgEl || !graphData || !graphData.nodes || graphData.nodes.length === 0) return;
+function setKgLayoutMode(mode) {
+    if (!['mindmap', 'flowchart', 'force'].includes(mode)) return;
+    currentKgLayoutMode = mode;
 
-    // Clear previous SVG contents
+    document.querySelectorAll('.kg-mode-btn').forEach(btn => btn.classList.remove('active'));
+    if (mode === 'mindmap') document.getElementById('btnKgMindmap')?.classList.add('active');
+    if (mode === 'flowchart') document.getElementById('btnKgFlowchart')?.classList.add('active');
+    if (mode === 'force') document.getElementById('btnKgForce')?.classList.add('active');
+
+    renderKnowledgeGraph();
+}
+
+function zoomKg(factor) {
+    if (!kgSvgSelection || !kgZoomBehavior) return;
+    kgSvgSelection.transition().duration(300).call(kgZoomBehavior.scaleBy, factor);
+}
+
+function resetKgZoom() {
+    if (!kgSvgSelection || !kgZoomBehavior) return;
+    const svgEl = document.getElementById('knowledgeGraphSvg');
+    const width = svgEl ? (svgEl.clientWidth || 900) : 900;
+    const height = svgEl ? (svgEl.clientHeight || 520) : 520;
+    
+    kgSvgSelection.transition().duration(500).call(
+        kgZoomBehavior.transform,
+        d3.zoomIdentity.translate(0, 0).scale(1)
+    );
+}
+
+function handleKgSearch(query) {
+    currentKgSearchQuery = (query || '').trim().toLowerCase();
+    if (!kgContainerGroup) return;
+
+    if (!currentKgSearchQuery) {
+        kgContainerGroup.selectAll('.kg-node-group').classed('dimmed', false);
+        kgContainerGroup.selectAll('.kg-path').classed('dimmed', false);
+        return;
+    }
+
+    kgContainerGroup.selectAll('.kg-node-group').each(function(d) {
+        const nameMatch = d.name && d.name.toLowerCase().includes(currentKgSearchQuery);
+        const groupMatch = d.group && d.group.toLowerCase().includes(currentKgSearchQuery);
+        const isMatched = nameMatch || groupMatch;
+        d3.select(this).classed('dimmed', !isMatched);
+    });
+
+    kgContainerGroup.selectAll('.kg-path').classed('dimmed', true);
+}
+
+// ── FLOATING REPORT OBSERVATION HOVER POPOVER HANDLERS ─────────────────────
+function showReportPopover(e, r) {
+    const popover = document.getElementById('reportHoverPopover');
+    if (!popover || !r) return;
+
+    document.getElementById('popoverReportId').textContent = r.report_id || r.id || 'OIL-HSE-RPT';
+    document.getElementById('popoverDate').textContent = r.date || '2026';
+    
+    const badge = document.getElementById('popoverSifBadge');
+    const isSif = r.sif_potential === 1 || r.sif_potential === '1' || r.sif === 1;
+    if (badge) {
+        badge.textContent = isSif ? 'SIF Potential' : 'Non-SIF';
+        badge.className = isSif ? 'popover-sif' : 'popover-sif nonsif';
+    }
+
+    document.getElementById('popoverTitle').textContent = r.report_title || r.title || r.description?.substring(0, 50) || 'Safety Incident';
+    document.getElementById('popoverSite').textContent = r.site_location || 'OIL Operational Installation';
+    document.getElementById('popoverDept').textContent = r.department || 'Operations';
+    document.getElementById('popoverDesc').textContent = r.description || r.title || 'No observation narrative details available.';
+    document.getElementById('popoverActivity').textContent = r.activity_being_performed || r.precursor_pattern || 'Routine Rig / Asset Operations';
+    document.getElementById('popoverAction').textContent = r.immediate_corrective_action || 'Operational safety protocol applied.';
+
+    moveReportPopover(e);
+    popover.classList.add('visible');
+}
+
+function moveReportPopover(e) {
+    const popover = document.getElementById('reportHoverPopover');
+    if (!popover || !popover.classList.contains('visible')) return;
+
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
+    const popoverW = 440;
+    const popoverH = 260;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    let left = mouseX + 18;
+    let top = mouseY + 18;
+
+    if (left + popoverW > winW - 10) {
+        left = mouseX - popoverW - 18;
+    }
+    if (top + popoverH > winH - 10) {
+        top = mouseY - popoverH - 18;
+    }
+
+    popover.style.left = `${Math.max(10, left)}px`;
+    popover.style.top = `${Math.max(10, top)}px`;
+}
+
+function hideReportPopover() {
+    const popover = document.getElementById('reportHoverPopover');
+    if (popover) popover.classList.remove('visible');
+}
+
+function toggleExpandDesc(cellEl) {
+    if (!cellEl) return;
+    cellEl.classList.toggle('expanded');
+}
+
+function openKgInspector(d) {
+    const drawer = document.getElementById('kgInspectorDrawer');
+    if (!drawer) return;
+
+    document.getElementById('inspNodeName').textContent = d.name || 'N/A';
+    
+    const badge = document.getElementById('inspGroupBadge');
+    if (badge) {
+        badge.textContent = d.group || 'Node';
+        const colors = {
+            'Department': '#3b82f6',
+            'Life-Saving Rule': '#f59e0b',
+            'Barrier Category': '#ef4444',
+            'Precursor Pattern': '#10b981'
+        };
+        badge.style.background = colors[d.group] || '#64748b';
+    }
+
+    document.getElementById('inspTotalIncidents').textContent = d.value || 0;
+    document.getElementById('inspSifCount').textContent = d.sif_count || 0;
+    document.getElementById('inspAvgSeverity').textContent = (d.avg_severity || 0) + '%';
+    document.getElementById('inspTopSite').textContent = d.top_site || 'N/A';
+
+    const reportListEl = document.getElementById('inspReportList');
+    if (reportListEl) {
+        reportListEl.innerHTML = '';
+        const reports = d.reports || [];
+        if (reports.length === 0) {
+            reportListEl.innerHTML = '<p style="color:#64748b; font-size:10px;">No specific report snippets linked.</p>';
+        } else {
+            reports.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'insp-report-item';
+                item.style.cursor = 'pointer';
+                item.title = 'Hover to view full observation narrative';
+                item.innerHTML = `
+                    <div style="display:flex; justify-between; align-items:center;">
+                        <span class="id-tag">${r.id}</span>
+                        ${r.sif ? '<span style="color:#ef4444; font-weight:700; font-size:9px;">[SIF]</span>' : ''}
+                    </div>
+                    <div class="title-txt">${r.title}</div>
+                `;
+                item.addEventListener('mouseenter', (e) => showReportPopover(e, r));
+                item.addEventListener('mousemove', (e) => moveReportPopover(e));
+                item.addEventListener('mouseleave', () => hideReportPopover());
+                reportListEl.appendChild(item);
+            });
+        }
+    }
+
+    drawer.classList.add('open');
+}
+
+function closeKgInspector() {
+    const drawer = document.getElementById('kgInspectorDrawer');
+    if (drawer) drawer.classList.remove('open');
+}
+
+function renderKnowledgeGraph(graphData) {
+    if (graphData) currentKgData = graphData;
+    if (!currentKgData || !currentKgData.nodes || currentKgData.nodes.length === 0) return;
+
+    const svgEl = document.getElementById('knowledgeGraphSvg');
+    if (!svgEl) return;
+
+    if (activeKgSimulation) {
+        activeKgSimulation.stop();
+        activeKgSimulation = null;
+    }
+
     d3.select(svgEl).selectAll('*').remove();
 
-    const width = svgEl.clientWidth || 800;
-    const height = 480;
+    const width = svgEl.clientWidth || 920;
+    const height = svgEl.clientHeight || 520;
 
-    const svg = d3.select(svgEl)
+    kgSvgSelection = d3.select(svgEl)
         .attr('viewBox', [0, 0, width, height]);
 
-    // Color scale for node groups
+    kgContainerGroup = kgSvgSelection.append('g').attr('class', 'kg-zoom-container');
+
+    kgZoomBehavior = d3.zoom()
+        .scaleExtent([0.4, 3])
+        .on('zoom', (event) => {
+            kgContainerGroup.attr('transform', event.transform);
+        });
+
+    kgSvgSelection.call(kgZoomBehavior);
+
     const groupColors = {
         'Department': '#3B82F6',
-        'Life-Saving Rule': '#D97706',
+        'Life-Saving Rule': '#F59E0B',
         'Barrier Category': '#EF4444',
         'Precursor Pattern': '#10B981'
     };
 
-    const links = graphData.links.map(d => Object.assign({}, d));
-    const nodes = graphData.nodes.map(d => Object.assign({}, d));
+    const groupOrder = ['Department', 'Life-Saving Rule', 'Barrier Category', 'Precursor Pattern'];
 
-    const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(85))
-        .force('charge', d3.forceManyBody().strength(-140))
+    const rawNodes = currentKgData.nodes.map(d => Object.assign({}, d));
+    const rawLinks = currentKgData.links.map(d => Object.assign({}, d));
+
+    const nodeMap = new Map(rawNodes.map(n => [n.id, n]));
+
+    if (currentKgLayoutMode === 'mindmap') {
+        renderKgMindmapMode(kgContainerGroup, rawNodes, rawLinks, nodeMap, groupColors, groupOrder, width, height);
+    } else if (currentKgLayoutMode === 'flowchart') {
+        renderKgFlowchartMode(kgContainerGroup, rawNodes, rawLinks, nodeMap, groupColors, groupOrder, width, height);
+    } else {
+        renderKgForceMode(kgContainerGroup, rawNodes, rawLinks, nodeMap, groupColors, width, height);
+    }
+
+    if (currentKgSearchQuery) {
+        handleKgSearch(currentKgSearchQuery);
+    }
+}
+
+// ── MIND MAP (NOTEBOOKLM TREE LAYOUT) ─────────────────────────────────────────
+function renderKgMindmapMode(container, nodes, links, nodeMap, groupColors, groupOrder, width, height) {
+    const layerX = {
+        'Department': 60,
+        'Life-Saving Rule': 300,
+        'Barrier Category': 580,
+        'Precursor Pattern': 860
+    };
+
+    groupOrder.forEach(grp => {
+        const grpNodes = nodes.filter(n => n.group === grp);
+        const count = grpNodes.length;
+        const startY = 50;
+        const availableH = height - 100;
+        const stepY = count > 1 ? availableH / (count - 1) : availableH / 2;
+
+        grpNodes.forEach((n, idx) => {
+            n.x = layerX[grp];
+            n.y = startY + (count > 1 ? idx * stepY : availableH / 2);
+        });
+    });
+
+    const linkPaths = links.map(l => {
+        const source = nodeMap.get(typeof l.source === 'object' ? l.source.id : l.source);
+        const target = nodeMap.get(typeof l.target === 'object' ? l.target.id : l.target);
+        return { source, target, value: l.value };
+    }).filter(d => d.source && d.target);
+
+    // Draw Cubic Bezier Path Connections
+    const pathGroup = container.append('g').attr('class', 'kg-paths-layer');
+    const pathSel = pathGroup.selectAll('path')
+        .data(linkPaths)
+        .join('path')
+        .attr('class', 'kg-path')
+        .attr('d', d => {
+            const sx = d.source.x + 80;
+            const sy = d.source.y;
+            const tx = d.target.x - 10;
+            const ty = d.target.y;
+            const dx = (tx - sx) * 0.5;
+            return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+        });
+
+    renderKgNodes(container, nodes, linkPaths, pathSel, groupColors);
+}
+
+// ── COLUMN FLOWCHART LAYOUT ──────────────────────────────────────────────────
+function renderKgFlowchartMode(container, nodes, links, nodeMap, groupColors, groupOrder, width, height) {
+    const colWidths = [190, 210, 210, 210];
+    const colXs = [40, 270, 520, 770];
+
+    const isDarkKg = document.body.classList.contains('dark-mode');
+    const colFill = isDarkKg ? 'rgba(30, 41, 59, 0.45)' : 'rgba(241, 245, 249, 0.7)';
+    const colStroke = isDarkKg ? 'rgba(255, 255, 255, 0.08)' : 'rgba(148, 163, 184, 0.3)';
+
+    groupOrder.forEach((grp, colIdx) => {
+        const bgBox = container.append('rect')
+            .attr('x', colXs[colIdx] - 15)
+            .attr('y', 20)
+            .attr('width', colWidths[colIdx])
+            .attr('height', height - 40)
+            .attr('rx', 10)
+            .attr('fill', colFill)
+            .attr('stroke', colStroke);
+
+        container.append('text')
+            .attr('x', colXs[colIdx] - 5)
+            .attr('y', 40)
+            .attr('fill', groupColors[grp])
+            .attr('font-size', '10px')
+            .attr('font-weight', '800')
+            .attr('letter-spacing', '0.8px')
+            .text(grp.toUpperCase());
+
+        const grpNodes = nodes.filter(n => n.group === grp);
+        const count = grpNodes.length;
+        const startY = 75;
+        const availableH = height - 120;
+        const stepY = count > 1 ? availableH / (count - 1) : availableH / 2;
+
+        grpNodes.forEach((n, idx) => {
+            n.x = colXs[colIdx];
+            n.y = startY + (count > 1 ? idx * stepY : availableH / 2);
+        });
+    });
+
+    const linkPaths = links.map(l => {
+        const source = nodeMap.get(typeof l.source === 'object' ? l.source.id : l.source);
+        const target = nodeMap.get(typeof l.target === 'object' ? l.target.id : l.target);
+        return { source, target, value: l.value };
+    }).filter(d => d.source && d.target);
+
+    const pathGroup = container.append('g').attr('class', 'kg-paths-layer');
+    const pathSel = pathGroup.selectAll('path')
+        .data(linkPaths)
+        .join('path')
+        .attr('class', 'kg-path')
+        .attr('d', d => {
+            const sx = d.source.x + 150;
+            const sy = d.source.y;
+            const tx = d.target.x - 10;
+            const ty = d.target.y;
+            const dx = (tx - sx) * 0.5;
+            return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+        });
+
+    renderKgNodes(container, nodes, linkPaths, pathSel, groupColors);
+}
+
+// ── FORCE NETWORK LAYOUT ─────────────────────────────────────────────────────
+function renderKgForceMode(container, nodes, links, nodeMap, groupColors, width, height) {
+    const formattedLinks = links.map(d => Object.assign({}, d));
+    const formattedNodes = nodes.map(d => Object.assign({}, d));
+
+    activeKgSimulation = d3.forceSimulation(formattedNodes)
+        .force('link', d3.forceLink(formattedLinks).id(d => d.id).distance(120))
+        .force('charge', d3.forceManyBody().strength(-200))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(22));
+        .force('collision', d3.forceCollide().radius(40));
 
-    const link = svg.append('g')
-        .selectAll('line')
-        .data(links)
-        .join('line');
+    const pathGroup = container.append('g').attr('class', 'kg-paths-layer');
+    const pathSel = pathGroup.selectAll('path')
+        .data(formattedLinks)
+        .join('path')
+        .attr('class', 'kg-path');
 
-    const node = svg.append('g')
-        .selectAll('g')
+    const nodeSel = renderKgNodes(container, formattedNodes, formattedLinks, pathSel, groupColors);
+
+    // Enable dragging in Force Mode
+    nodeSel.call(d3.drag()
+        .on('start', (event, d) => {
+            if (!event.active) activeKgSimulation.alphaTarget(0.3).restart();
+            d.fx = d.x; d.fy = d.y;
+        })
+        .on('drag', (event, d) => {
+            d.fx = event.x; d.fy = event.y;
+        })
+        .on('end', (event, d) => {
+            if (!event.active) activeKgSimulation.alphaTarget(0);
+            d.fx = event.x; d.fy = event.y;
+        }));
+
+    activeKgSimulation.on('tick', () => {
+        pathSel.attr('d', d => {
+            const sx = d.source.x;
+            const sy = d.source.y;
+            const tx = d.target.x;
+            const ty = d.target.y;
+            const dx = (tx - sx) * 0.5;
+            return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+        });
+
+        nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+}
+
+// ── COMMON NODE CARD RENDERER & INTERACTION HANDLER ──────────────────────────
+function renderKgNodes(container, nodes, linkPaths, pathSel, groupColors) {
+    const nodeGroup = container.append('g').attr('class', 'kg-nodes-layer');
+
+    const nodeG = nodeGroup.selectAll('g.kg-node-group')
         .data(nodes)
         .join('g')
-        .call(d3.drag()
-            .on('start', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x; d.fy = d.y;
-            })
-            .on('drag', (event, d) => {
-                d.fx = event.x; d.fy = event.y;
-            })
-            .on('end', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0);
-                // Keep node fixed at pulled position so it stays in place
-                d.fx = event.x;
-                d.fy = event.y;
-            }));
+        .attr('class', 'kg-node-group')
+        .attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
 
-    node.append('circle')
-        .attr('r', d => Math.min(18, 7 + Math.sqrt(d.value || 1) * 2))
-        .attr('fill', d => groupColors[d.group] || '#64748B')
-        .attr('stroke', '#FFFFFF')
-        .attr('stroke-width', 2);
+    const isDarkKg = document.body.classList.contains('dark-mode');
+    const pillBg = isDarkKg ? '#151D2A' : '#FFFFFF';
+    const pillTxt = isDarkKg ? '#F8FAFC' : '#0F172A';
 
-    node.append('text')
-        .text(d => d.name.length > 22 ? d.name.substring(0, 20) + '...' : d.name)
+    // Pill Card Background
+    nodeG.append('rect')
+        .attr('class', 'kg-node-pill')
+        .attr('x', -10)
+        .attr('y', -16)
+        .attr('width', d => Math.max(140, (d.name ? d.name.length : 10) * 7.2 + 45))
+        .attr('height', 32)
+        .attr('rx', 6)
+        .attr('fill', pillBg)
+        .attr('stroke', d => groupColors[d.group] || '#64748b');
+
+    // Group Color Indicator Dot
+    nodeG.append('circle')
+        .attr('cx', 2)
+        .attr('cy', 0)
+        .attr('r', 5)
+        .attr('fill', d => groupColors[d.group] || '#64748b');
+
+    // Label Text
+    nodeG.append('text')
         .attr('x', 14)
-        .attr('y', 4);
+        .attr('y', 3)
+        .attr('fill', pillTxt)
+        .attr('font-size', '11px')
+        .attr('font-weight', '600')
+        .attr('pointer-events', 'none')
+        .text(d => {
+            const name = d.name || '';
+            return name.length > 22 ? name.substring(0, 20) + '...' : name;
+        });
 
-    // Click to highlight connected edges
-    node.on('click', (event, d) => {
+    // Count Badge (Reports count)
+    nodeG.append('rect')
+        .attr('x', d => Math.max(140, (d.name ? d.name.length : 10) * 7.2 + 45) - 38)
+        .attr('y', -10)
+        .attr('width', 24)
+        .attr('height', 18)
+        .attr('rx', 4)
+        .attr('fill', d => (d.sif_count && d.sif_count > 0) ? 'rgba(239, 68, 68, 0.25)' : 'rgba(51, 65, 85, 0.6)')
+        .attr('stroke', d => (d.sif_count && d.sif_count > 0) ? '#ef4444' : 'rgba(255, 255, 255, 0.1)');
+
+    nodeG.append('text')
+        .attr('x', d => Math.max(140, (d.name ? d.name.length : 10) * 7.2 + 45) - 26)
+        .attr('y', 3)
+        .attr('fill', d => (d.sif_count && d.sif_count > 0) ? '#fca5a5' : '#94a3b8')
+        .attr('font-size', '10px')
+        .attr('font-weight', '700')
+        .attr('text-anchor', 'middle')
+        .attr('pointer-events', 'none')
+        .text(d => d.value || 1);
+
+    // Hover Flow Tracing Interaction
+    nodeG.on('mouseenter', (event, d) => {
+        if (currentKgSearchQuery) return; // ignore during search
+        
+        const connectedNodeIds = new Set([d.id]);
+        
+        pathSel.classed('highlighted', l => {
+            const sId = typeof l.source === 'object' ? l.source.id : l.source;
+            const tId = typeof l.target === 'object' ? l.target.id : l.target;
+            const isMatch = sId === d.id || tId === d.id;
+            if (isMatch) {
+                connectedNodeIds.add(sId);
+                connectedNodeIds.add(tId);
+            }
+            return isMatch;
+        });
+
+        pathSel.classed('dimmed', l => {
+            const sId = typeof l.source === 'object' ? l.source.id : l.source;
+            const tId = typeof l.target === 'object' ? l.target.id : l.target;
+            return sId !== d.id && tId !== d.id;
+        });
+
+        nodeG.classed('dimmed', n => !connectedNodeIds.has(n.id));
+    });
+
+    nodeG.on('mouseleave', () => {
+        if (currentKgSearchQuery) return;
+        pathSel.classed('highlighted', false);
+        pathSel.classed('dimmed', false);
+        nodeG.classed('dimmed', false);
+    });
+
+    // Click to Open Slide-Out Inspector Drawer
+    nodeG.on('click', (event, d) => {
         event.stopPropagation();
-        link.classed('highlighted', l => l.source.id === d.id || l.target.id === d.id);
+        openKgInspector(d);
     });
 
-    // Double-click to unpin/release node position
-    node.on('dblclick', (event, d) => {
-        event.stopPropagation();
-        d.fx = null;
-        d.fy = null;
-        simulation.alphaTarget(0.1).restart();
-    });
-
-    svg.on('click', () => link.classed('highlighted', false));
-
-    simulation.on('tick', () => {
-        link
-            .attr('x1', d => d.source.x)
-            .attr('y1', d => d.source.y)
-            .attr('x2', d => d.target.x)
-            .attr('y2', d => d.target.y);
-
-        node.attr('transform', d => `translate(${Math.max(20, Math.min(width - 20, d.x))},${Math.max(20, Math.min(height - 20, d.y))})`);
-    });
+    return nodeG;
 }
 
 function applyTableFilters() {
@@ -846,20 +1341,211 @@ function renderMasterTable() {
                </div>`
             : `<span class="read-only-marker" title="Historical reports are read-only">&mdash;</span>`;
 
+        const snippetText = (report.description || '').length > 85
+            ? (report.description.substring(0, 85) + '...')
+            : (report.description || '');
+
+        const riskPct = report.risk_pct || (isSif ? 88.5 : 22.0);
+        const tier = report.priority_tier || (riskPct >= 75 ? "P1 Critical" : (riskPct >= 50 ? "P2 High" : (riskPct >= 30 ? "P3 Moderate" : "P4 Low")));
+        const tierClass = tier.startsWith("P1") ? "tier-p1" : (tier.startsWith("P2") ? "tier-p2" : (tier.startsWith("P3") ? "tier-p3" : "tier-p4"));
+
         tr.innerHTML = `
             <td><strong>${report.report_id}</strong></td>
             <td>${report.date}</td>
             <td>${report.site_location}</td>
             <td>${report.department}</td>
             <td>${report.report_type}</td>
-            <td>${report.description.substring(0, 85)}...</td>
+            <td class="desc-cell" onclick="toggleExpandDesc(this)" title="Click inline expand or hover for full popover narrative">
+                <span class="desc-txt">${snippetText}</span>
+                <span class="desc-hover-badge">🔍 Hover Full</span>
+            </td>
+            <td><strong style="color: ${riskPct >= 60 ? '#ef4444' : '#38bdf8'}">${riskPct}%</strong></td>
+            <td><span class="tier-badge ${tierClass}">${tier}</span></td>
             <td>${sifStatus}</td>
             <td>${report.iogp_life_saving_rule}</td>
             <td>${actionCell}</td>
         `;
 
+        tr.addEventListener('mouseenter', (e) => showReportPopover(e, report));
+        tr.addEventListener('mousemove', (e) => moveReportPopover(e));
+        tr.addEventListener('mouseleave', () => hideReportPopover());
+
         tbody.appendChild(tr);
     });
+}
+
+// ── 5x5 MULTI-DIMENSIONAL RISK MATRIX ─────────────────────────────────────────
+function renderRiskMatrix(reports) {
+    const gridEl = document.getElementById('riskMatrixGrid');
+    if (!gridEl) return;
+    gridEl.innerHTML = '';
+
+    // 5x5 Matrix cells (Likelihood 5..1, Consequence 1..5)
+    const cells = [];
+    const reportsList = reports || allReports || [];
+
+    for (let l = 5; l >= 1; l--) {
+        for (let c = 1; c <= 5; c++) {
+            const score = l * c;
+            let cellClass = 'cell-m-low';
+            let label = 'Low';
+            if (score >= 15) { cellClass = 'cell-m-crit'; label = 'Critical'; }
+            else if (score >= 10) { cellClass = 'cell-m-high'; label = 'High'; }
+            else if (score >= 5) { cellClass = 'cell-m-med'; label = 'Medium'; }
+
+            // Calculate reports matching this score bucket
+            const matchingCount = reportsList.filter(r => {
+                const rScore = r.risk_pct || 20;
+                if (score >= 15) return rScore >= 75;
+                if (score >= 10) return rScore >= 50 && rScore < 75;
+                if (score >= 5) return rScore >= 30 && rScore < 50;
+                return rScore < 30;
+            }).length;
+
+            const countInCell = Math.max(1, Math.round(matchingCount / 5));
+
+            const cellDiv = document.createElement('div');
+            cellDiv.className = `risk-matrix-cell ${cellClass}`;
+            cellDiv.title = `Likelihood ${l} x Consequence ${c} = Risk Score ${score} (${label})`;
+            cellDiv.innerHTML = `
+                <div>L${l}&times;C${c}</div>
+                <div style="font-size: 14px; font-weight: 800;">${countInCell}</div>
+            `;
+            gridEl.appendChild(cellDiv);
+        }
+    }
+}
+
+// ── PREDICTIVE RISK FORECAST ──────────────────────────────────────────────────
+async function fetchPredictiveRisk() {
+    try {
+        const response = await fetch('/api/predictive-risk');
+        const data = await response.json();
+        const grid = document.getElementById('predictiveRiskGrid');
+        if (!grid || !data.site_predictions) return;
+
+        grid.innerHTML = '';
+        data.site_predictions.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'predictive-card';
+            card.innerHTML = `
+                <div class="site-name">${p.site_location}</div>
+                <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--amber); margin-bottom:4px;">
+                    <span>30-Day Probability</span>
+                    <strong>${p.predicted_sif_probability_30d}%</strong>
+                </div>
+                <div class="prob-bar">
+                    <div class="prob-fill" style="width: ${p.predicted_sif_probability_30d}%;"></div>
+                </div>
+                <div class="pred-txt">&bull; ${p.recommended_audit}</div>
+            `;
+            grid.appendChild(card);
+        });
+    } catch (err) {
+        console.error("Failed to load predictive risk forecast:", err);
+    }
+}
+
+// ── SAFETY SIMULATOR ─────────────────────────────────────────────────────────
+async function runSafetySimulation(barrierKey) {
+    const scenarioSelect = document.getElementById('simScenarioSelect');
+    const text = scenarioSelect ? scenarioSelect.value : 'Workover operations at Baghjan';
+
+    document.querySelectorAll('.sim-barrier-btn').forEach(btn => btn.classList.remove('active'));
+    event?.target?.classList.add('active');
+
+    try {
+        const response = await fetch('/api/simulate-safety', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, barrier_removed: barrierKey })
+        });
+        const res = await response.json();
+
+        document.getElementById('simOrigRisk').textContent = `${res.original_risk_pct}%`;
+        document.getElementById('simResultRisk').textContent = `${res.simulated_risk_pct}%`;
+        document.getElementById('simResultDelta').textContent = `+${res.risk_increase_delta}% Risk`;
+        document.getElementById('simSummaryTxt').textContent = res.consequence_summary || 'Barrier removed.';
+    } catch (err) {
+        console.error("Failed to run safety simulation:", err);
+    }
+}
+
+// ── EXECUTIVE HSE SUMMARY MODAL ──────────────────────────────────────────────
+async function openHseExecutiveSummaryModal() {
+    const modal = document.getElementById('hseSummaryModalOverlay');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    try {
+        const response = await fetch('/api/hse-summary');
+        const data = await response.json();
+
+        document.getElementById('hseModalTitle').textContent = data.title || 'OIL Safety Intelligence Brief';
+        document.getElementById('hseModalSummaryTxt').textContent = data.executive_summary_text || '';
+
+        const grid = document.getElementById('hseModalSectionsGrid');
+        if (grid) {
+            grid.innerHTML = `
+                <div style="background:rgba(30,41,59,0.7); padding:10px; border-radius:6px; margin-bottom:10px;">
+                    <strong style="color:#38bdf8; font-size:11px; text-transform:uppercase;">Leadership Recommendations:</strong>
+                    <ul style="margin:6px 0 0 16px; color:#cbd5e1; font-size:11px; line-height:1.5;">
+                        ${(data.leadership_recommendations || []).map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+    } catch (err) {
+        console.error("Failed to fetch HSE summary:", err);
+    }
+}
+
+function closeHseExecutiveSummaryModal() {
+    const modal = document.getElementById('hseSummaryModalOverlay');
+    if (modal) modal.style.display = 'none';
+}
+
+// ── AI NARRATIVE ENHANCER ───────────────────────────────────────────────────
+async function enhanceClassifierText() {
+    const textarea = document.getElementById('classifierTextarea');
+    if (!textarea || !textarea.value.trim()) return;
+
+    try {
+        const response = await fetch('/api/enhance-narrative', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: textarea.value.trim() })
+        });
+        const res = await response.json();
+        if (res.enhanced) {
+            textarea.value = res.enhanced;
+        }
+    } catch (err) {
+        console.error("Failed to enhance narrative:", err);
+    }
+}
+
+// ── MULTILINGUAL LANGUAGE SWITCHER ─────────────────────────────────────────
+function changeLanguage(langCode) {
+    const badge = document.getElementById('langBadge');
+    const labels = {
+        'en': 'Detected: English (Standard Domain)',
+        'hi': 'Detected: Hindi / Hinglish',
+        'as': 'Detected: Assamese (OIL Assam Assets)',
+        'kn': 'Detected: Kannada (KG Basin Asset)'
+    };
+    if (badge) badge.textContent = labels[langCode] || 'Detected: English';
+}
+
+// ── HITL REVIEW CONFIRMATION ───────────────────────────────────────────────
+function confirmHitlReview() {
+    const banner = document.getElementById('hitlBanner');
+    if (banner) {
+        banner.style.background = 'rgba(16, 185, 129, 0.2)';
+        banner.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+        banner.querySelector('.hitl-txt strong').textContent = '✅ Verified by Senior HSE Officer';
+        banner.querySelector('.hitl-txt p').textContent = 'Human-in-the-Loop review completed & logged in audit record.';
+    }
 }
 
 function renderDensityTable(siteData) {
@@ -948,6 +1634,7 @@ function renderSeverityDonutChart(severityData) {
 
     const labels = Object.keys(severityData);
     const values = Object.values(severityData);
+    const { legendColor } = getChartColors();
 
     severityDonutChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
@@ -963,7 +1650,7 @@ function renderSeverityDonutChart(severityData) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#374151', font: { size: 10 } } }
+                legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10.5 } } }
             }
         }
     });
@@ -977,7 +1664,8 @@ function renderBarrierChart(barrierData) {
 
     const labels = Object.keys(barrierData);
     const values = Object.values(barrierData);
-    const colors = ['#E07B00', '#DC2626', '#16A34A', '#0369A1', '#7C3AED', '#DB2777'];
+    const colors = ['#FF6B00', '#DC2626', '#16A34A', '#0369A1', '#7C3AED', '#DB2777'];
+    const { tickColor, gridColor } = getChartColors();
 
     barrierChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'bar',
@@ -998,8 +1686,8 @@ function renderBarrierChart(barrierData) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { color: '#6B7280' }, grid: { color: '#F3F4F6' } },
-                y: { ticks: { color: '#374151', font: { size: 10.5 } }, grid: { display: false } }
+                x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor, font: { size: 10.5 } }, grid: { display: false } }
             }
         }
     });
@@ -1036,6 +1724,8 @@ function renderMonthlyTrend(trendData, forecastData = [], forecastSummary = "") 
         ...forecastSifs
     ];
 
+    const { tickColor, gridColor, legendColor } = getChartColors();
+
     monthlyTrendChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
@@ -1064,9 +1754,9 @@ function renderMonthlyTrend(trendData, forecastData = [], forecastSummary = "") 
                 {
                     label: 'Projected SIF Forecast',
                     data: forecastSifSeries,
-                    borderColor: '#D97706',
+                    borderColor: '#FF6B00',
                     borderDash: [6, 4],
-                    backgroundColor: 'rgba(217,119,6,0.08)',
+                    backgroundColor: 'rgba(255,107,0,0.08)',
                     borderWidth: 2.5,
                     pointRadius: 4,
                     pointStyle: 'rectRot',
@@ -1079,11 +1769,11 @@ function renderMonthlyTrend(trendData, forecastData = [], forecastSummary = "") 
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top', labels: { color: '#374151', font: { size: 11 } } }
+                legend: { position: 'top', labels: { color: legendColor, font: { size: 11 } } }
             },
             scales: {
-                x: { ticks: { color: '#6B7280', font: { size: 10 } }, grid: { display: false } },
-                y: { ticks: { color: '#6B7280' }, grid: { color: '#F3F4F6' }, beginAtZero: true }
+                x: { ticks: { color: tickColor, font: { size: 10 } }, grid: { display: false } },
+                y: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true }
             }
         }
     });
@@ -1093,6 +1783,8 @@ function renderOverviewCharts(data) {
     const ctxSiteEl = document.getElementById('overviewSiteChart');
     const ctxLsrEl = document.getElementById('overviewLsrChart');
     if (!ctxSiteEl || !ctxLsrEl) return;
+
+    const { tickColor, gridColor, legendColor } = getChartColors();
 
     const ctxSite = ctxSiteEl.getContext('2d');
     const siteData = data.site_rankings || [];
@@ -1108,8 +1800,8 @@ function renderOverviewCharts(data) {
             datasets: [{
                 label: 'SIF Precursor Density (%)',
                 data: densities,
-                backgroundColor: 'rgba(243, 156, 18, 0.65)',
-                borderColor: '#F39C12',
+                backgroundColor: 'rgba(255, 107, 0, 0.75)',
+                borderColor: '#FF6B00',
                 borderWidth: 1.5,
                 borderRadius: 6
             }]
@@ -1119,8 +1811,8 @@ function renderOverviewCharts(data) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { color: '#6B7280', font: { size: 10, weight: '600' } }, grid: { display: false } },
-                y: { ticks: { color: '#6B7280' }, grid: { color: '#F3F4F6' }, title: { display: true, text: 'SIF Density (%)', color: '#374151' } }
+                x: { ticks: { color: tickColor, font: { size: 10, weight: '600' } }, grid: { display: false } },
+                y: { ticks: { color: tickColor }, grid: { color: gridColor }, title: { display: true, text: 'SIF Density (%)', color: tickColor } }
             }
         }
     });
@@ -1136,7 +1828,7 @@ function renderOverviewCharts(data) {
             labels: Object.keys(lsrData),
             datasets: [{
                 data: Object.values(lsrData),
-                backgroundColor: ['#EF4444', '#F39C12', '#D97706', '#10B981', '#F59E0B', '#9333EA', '#14B8A6', '#E11D48'],
+                backgroundColor: ['#EF4444', '#FF6B00', '#D97706', '#10B981', '#F59E0B', '#9333EA', '#14B8A6', '#E11D48'],
                 borderWidth: 0
             }]
         },
@@ -1144,7 +1836,7 @@ function renderOverviewCharts(data) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'right', labels: { color: '#374151', font: { size: 10.5 } } }
+                legend: { position: 'right', labels: { color: legendColor, font: { size: 10.5 } } }
             }
         }
     });
@@ -1155,6 +1847,7 @@ function renderDensityDetailChart(siteData) {
     if (!ctx) return;
     const labels = siteData.map(s => s.site_location);
     const densities = siteData.map(s => s.sif_density);
+    const { tickColor, gridColor } = getChartColors();
 
     if (densityDetailChartInstance) densityDetailChartInstance.destroy();
 
@@ -1165,8 +1858,8 @@ function renderDensityDetailChart(siteData) {
             datasets: [{
                 label: 'SIF Precursor Density (%)',
                 data: densities,
-                backgroundColor: 'rgba(243, 156, 18, 0.7)',
-                borderColor: '#F39C12',
+                backgroundColor: 'rgba(255, 107, 0, 0.75)',
+                borderColor: '#FF6B00',
                 borderWidth: 1.5,
                 borderRadius: 6
             }]
@@ -1176,8 +1869,8 @@ function renderDensityDetailChart(siteData) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { color: '#6B7280', font: { size: 10, weight: '600' } }, grid: { color: '#F3F4F6' } },
-                y: { ticks: { color: '#6B7280' }, grid: { color: '#F3F4F6' } }
+                x: { ticks: { color: tickColor, font: { size: 10, weight: '600' } }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor }, grid: { color: gridColor } }
             }
         }
     });
@@ -1186,6 +1879,7 @@ function renderDensityDetailChart(siteData) {
 function renderIogpDetailChart(lsrData) {
     const ctx = document.getElementById('iogpDetailChart');
     if (!ctx) return;
+    const { tickColor, gridColor } = getChartColors();
 
     if (iogpDetailChartInstance) iogpDetailChartInstance.destroy();
 
@@ -1196,8 +1890,8 @@ function renderIogpDetailChart(lsrData) {
             datasets: [{
                 label: 'Report Count',
                 data: Object.values(lsrData),
-                backgroundColor: 'rgba(245, 158, 11, 0.7)',
-                borderColor: '#F59E0B',
+                backgroundColor: 'rgba(255, 107, 0, 0.75)',
+                borderColor: '#FF6B00',
                 borderWidth: 1.5,
                 borderRadius: 6
             }]
@@ -1208,8 +1902,8 @@ function renderIogpDetailChart(lsrData) {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { color: '#6B7280' }, grid: { color: '#F3F4F6' } },
-                y: { ticks: { color: '#374151', font: { size: 10.5 } }, grid: { display: false } }
+                x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor, font: { size: 10.5 } }, grid: { display: false } }
             }
         }
     });
@@ -1271,6 +1965,8 @@ function renderSimilarReports(reports) {
 
         const item = document.createElement('div');
         item.className = 'similar-item';
+        item.style.cursor = 'pointer';
+        item.title = 'Hover to view full report observation popover';
         item.innerHTML = `
             <div class="similar-info">
                 <div class="similar-title">${r.report_id} — ${r.report_title}</div>
@@ -1287,6 +1983,9 @@ function renderSimilarReports(reports) {
                 <div class="similar-score-badge">${r.similarity_score}% Match</div>
             </div>
         `;
+        item.addEventListener('mouseenter', (e) => showReportPopover(e, r));
+        item.addEventListener('mousemove', (e) => moveReportPopover(e));
+        item.addEventListener('mouseleave', () => hideReportPopover());
         container.appendChild(item);
     });
 }
@@ -1389,6 +2088,23 @@ async function runClassification() {
             `).join('');
         }
 
+        // ── HITL Banner & Causation Chain ────────────────────────────────
+        const hitlBanner = document.getElementById('hitlBanner');
+        if (hitlBanner) {
+            if (data.requires_hitl_review) {
+                hitlBanner.style.display = 'flex';
+                document.getElementById('hitlReasonTxt').textContent = data.hitl_reason || 'Model confidence below 75% threshold. Senior HSE Officer verification recommended.';
+            } else {
+                hitlBanner.style.display = 'none';
+            }
+        }
+
+        const chain = data.hazard_causation_chain || {};
+        if (document.getElementById('chainHazard')) document.getElementById('chainHazard').textContent = chain.hazard_identified || 'Operational Hazard';
+        if (document.getElementById('chainLsr')) document.getElementById('chainLsr').textContent = chain.lsr_breached || data.iogp_life_saving_rule || 'General Safety';
+        if (document.getElementById('chainBarrier')) document.getElementById('chainBarrier').textContent = chain.barrier_failure_mode || data.barrier_condition || 'Failed';
+        if (document.getElementById('chainVerdict')) document.getElementById('chainVerdict').textContent = chain.sif_verdict || (isSIF ? 'SIF Potential' : 'Non-SIF');
+
         // ── Assessment grid ───────────────────────────────────────────────
         const resRule = document.getElementById('resRule');
         const resEnergy = document.getElementById('resEnergy');
@@ -1415,4 +2131,588 @@ async function runClassification() {
         if (analyzeBtn) { analyzeBtn.disabled = (currentRole === 'analyst'); analyzeBtn.textContent = 'Classify Incident'; }
     }
 }
+
+// ============================================================
+// AI NARRATIVE POLISH ENHANCER
+// ============================================================
+async function enhanceClassifierText(targetId = 'classifierTextarea') {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+
+    const rawText = el.value ? el.value.trim() : '';
+    if (!rawText) {
+        alert('Please select or enter an observation narrative first.');
+        return;
+    }
+
+    let btn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : null;
+    const originalBtnText = btn ? btn.innerHTML : '';
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '✨ Polishing Narrative...';
+        }
+
+        const res = await fetch('/api/enhance-narrative', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: rawText })
+        });
+
+        if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data && data.enhanced) {
+            el.value = data.enhanced;
+
+            // If polishing the main classifier textarea, automatically re-classify to update UI cards
+            if (targetId === 'classifierTextarea') {
+                classifyIncident();
+            }
+        }
+    } catch (err) {
+        console.error('AI Narrative Polish failed:', err);
+        alert('Unable to polish narrative. Please check connection to server.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalBtnText || '✨ AI Polish Narrative';
+        }
+    }
+}
+
+// ============================================================
+// THEME SWITCHER LOGIC (LIGHT MODE & DARK MODE)
+// ============================================================
+function initTheme() {
+    const savedTheme = localStorage.getItem('oil_theme') || 'light';
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        updateThemeUI('dark');
+    } else {
+        document.body.classList.remove('dark-mode');
+        updateThemeUI('light');
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    const newTheme = isDark ? 'dark' : 'light';
+    localStorage.setItem('oil_theme', newTheme);
+    updateThemeUI(newTheme);
+}
+
+function updateThemeUI(theme) {
+    const themeLabel = document.getElementById('themeLabel');
+    const themeIcon = document.getElementById('themeIcon');
+    if (themeLabel) {
+        themeLabel.textContent = theme === 'dark' ? 'Dark' : 'Light';
+    }
+    if (themeIcon) {
+        if (theme === 'dark') {
+            themeIcon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>`;
+        } else {
+            themeIcon.innerHTML = `<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>`;
+        }
+    }
+
+    // Refresh charts and KG to reflect light/dark palette
+    if (analyticsData) {
+        renderOverviewCharts(analyticsData);
+        renderBarrierChart(analyticsData.barrier_distribution || {});
+        renderSeverityDonutChart(analyticsData.severity_buckets || {});
+        renderDensityDetailChart(analyticsData.site_rankings || []);
+        renderIogpDetailChart(analyticsData.lsr_distribution || {});
+        renderMonthlyTrend(analyticsData.monthly_trend || [], analyticsData.forecast_data || [], analyticsData.forecast_summary);
+    }
+    if (currentKgData) {
+        renderKnowledgeGraph();
+    }
+}
+
+// ============================================================
+// QUICK ACTIONS DROPDOWN MENU
+// ============================================================
+function toggleQuickActionsMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('quickActionsMenu');
+    if (menu) {
+        menu.style.display = (menu.style.display === 'flex' || menu.style.display === 'block') ? 'none' : 'flex';
+    }
+}
+
+function closeQuickActionsMenu() {
+    const menu = document.getElementById('quickActionsMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.quick-actions-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+        closeQuickActionsMenu();
+    }
+});
+
+function openRoleModal() {
+    const modal = document.getElementById('roleModalOverlay');
+    if (modal) modal.style.display = 'flex';
+}
+
+// ============================================================
+// EXECUTIVE HSE INTELLIGENCE AUDIT DOCUMENT POPULATOR
+// ============================================================
+async function openHseExecutiveSummaryModal() {
+    const modal = document.getElementById('hseSummaryModalOverlay');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+
+    try {
+        const res = await fetch('/api/hse-summary');
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        const data = await res.json();
+
+        // Metadata & Header
+        if (document.getElementById('docRefId')) document.getElementById('docRefId').textContent = data.report_ref_id || 'OIL-HSSE-AUDIT-2026';
+        if (document.getElementById('docDate')) document.getElementById('docDate').textContent = data.date || 'September 16, 2026';
+        if (document.getElementById('docTitle')) document.getElementById('docTitle').textContent = data.title || 'Executive SIF Precursor Audit Briefing';
+        if (document.getElementById('docSubtitle')) document.getElementById('docSubtitle').textContent = data.subtitle || 'OIL Directorate of Health, Safety, Security & Environment';
+
+        // KPI Badges
+        const metrics = data.metrics || {};
+        if (document.getElementById('docKpiTotal')) document.getElementById('docKpiTotal').textContent = metrics.total_reports || '500';
+        if (document.getElementById('docKpiSif')) document.getElementById('docKpiSif').textContent = metrics.sif_reports || '116';
+        if (document.getElementById('docKpiRate')) document.getElementById('docKpiRate').textContent = `${metrics.sif_rate_pct || 23.2}%`;
+        if (document.getElementById('docKpiTopSite')) document.getElementById('docKpiTopSite').textContent = metrics.top_high_risk_site || 'Makum';
+        if (document.getElementById('docKpiTopRule')) document.getElementById('docKpiTopRule').textContent = metrics.top_breached_rule || 'Line of Fire';
+
+        // Section 1: Narrative
+        if (document.getElementById('docExecutiveSummaryTxt')) {
+            document.getElementById('docExecutiveSummaryTxt').textContent = data.executive_summary_text || 'Executive briefing summary details.';
+        }
+
+        // Section 2: Installation Vulnerability Table
+        const siteBody = document.getElementById('docSiteTableBody');
+        if (siteBody && data.site_vulnerability_matrix) {
+            siteBody.innerHTML = data.site_vulnerability_matrix.map(s => `
+                <tr>
+                    <td><strong>${s.site_location}</strong></td>
+                    <td>${s.total}</td>
+                    <td style="color: var(--amber); font-weight: 700;">${s.sif}</td>
+                    <td><strong>${s.sif_density}%</strong></td>
+                    <td><span class="confidential-pill">${s.sif_density >= 30 ? 'CRITICAL RISK' : 'HIGH RISK'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // Section 3: Precursor Hazard Scenarios
+        const precGrid = document.getElementById('docPrecursorGrid');
+        if (precGrid && data.recurring_hazards) {
+            precGrid.innerHTML = data.recurring_hazards.map(p => `
+                <div class="doc-card-item">
+                    <h4>${p.pattern}</h4>
+                    <p><strong>Frequency:</strong> ${p.total_count} occurrences across ${p.affected_sites ? p.affected_sites.join(', ') : 'sites'}.</p>
+                    <p><strong>Rule:</strong> ${p.primary_rule} | <strong>SIF Rate:</strong> ${p.sif_rate_pct}%</p>
+                </div>
+            `).join('');
+        }
+
+        // Section 4: 30-Day Predictive SIF Exposure Ranking
+        const predGrid = document.getElementById('docPredictiveGrid');
+        if (predGrid && data.top_risk_sites) {
+            predGrid.innerHTML = data.top_risk_sites.map(s => `
+                <div class="doc-card-item">
+                    <h4>${s.site_location}</h4>
+                    <p><strong>30-Day SIF Exposure:</strong> <span style="color: var(--amber); font-weight: 800;">${s.predicted_sif_probability_30d}%</span></p>
+                    <p><strong>Audit Mandate:</strong> ${s.recommended_audit}</p>
+                </div>
+            `).join('');
+        }
+
+        // Section 5: Hierarchy of Controls Directives
+        const dirList = document.getElementById('docDirectivesList');
+        if (dirList && data.hierarchy_directives) {
+            dirList.innerHTML = data.hierarchy_directives.map(d => `
+                <div class="doc-dir-item">
+                    <strong>${d.level}</strong>
+                    <p>${d.directive}</p>
+                </div>
+            `).join('');
+        }
+
+        // Section 6: Signatures Block
+        const signGrid = document.getElementById('docSignoffGrid');
+        if (signGrid && data.signoff_signatories) {
+            signGrid.innerHTML = data.signoff_signatories.map(s => `
+                <div class="signoff-box">
+                    <div class="sign-line"></div>
+                    <div class="sign-name">${s.name}</div>
+                    <div class="sign-role">${s.role}</div>
+                    <div class="sign-dept">${s.dept}</div>
+                </div>
+            `).join('');
+        }
+
+    } catch (err) {
+        console.error('Failed to load Executive HSE Brief data:', err);
+    }
+}
+
+function closeHseExecutiveSummaryModal() {
+    const modal = document.getElementById('hseSummaryModalOverlay');
+    if (modal) modal.style.display = 'none';
+}
+
+// ============================================================
+// INCIDENT CLASSIFIER DATASET INTEGRATION (500 REPORTS)
+// ============================================================
+function getReportText(r) {
+    if (!r) return '';
+    return r.description || r.observation_text || r.observation || r.text || '';
+}
+
+function populateClassifierDatasetDropdown() {
+    const dropdown = document.getElementById('classifierDatasetDropdown');
+    if (!dropdown) return;
+
+    if (!masterReports || masterReports.length === 0) {
+        dropdown.innerHTML = '<option value="">No dataset reports loaded</option>';
+        return;
+    }
+
+    let html = `<option value="">-- Select any of the ${masterReports.length} real dataset incident reports --</option>`;
+    masterReports.forEach(r => {
+        const sifTag = (r.sif_potential == 1 || r.sif_potential === true) ? 'SIF Precursor' : 'Non-SIF';
+        const txt = getReportText(r);
+        const snippet = txt ? txt.slice(0, 65).replace(/"/g, '&quot;') : '';
+        html += `<option value="${r.report_id}">${r.report_id} | ${r.site_location || 'OIL Field'} | ${r.department || 'HSE'} (${sifTag}): "${snippet}..."</option>`;
+    });
+
+    dropdown.innerHTML = html;
+}
+
+window.classifyIncident = function() {
+    runClassification();
+};
+
+window.loadReportFromDropdown = function(reportId) {
+    if (!reportId) return;
+    const report = masterReports.find(r => r.report_id === reportId);
+    if (!report) return;
+
+    const textarea = document.getElementById('classifierTextarea');
+    if (textarea) {
+        textarea.value = getReportText(report);
+    }
+
+    runClassification();
+};
+
+window.openReportPickerModal = function() {
+    const modal = document.getElementById('reportPickerModalOverlay');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    renderPickerTableRows(masterReports);
+};
+
+window.closeReportPickerModal = function() {
+    const modal = document.getElementById('reportPickerModalOverlay');
+    if (modal) modal.style.display = 'none';
+};
+
+function renderPickerTableRows(reports) {
+    const tbody = document.getElementById('pickerTableBody');
+    if (!tbody) return;
+
+    if (!reports || reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No reports match your search query.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = reports.map(r => {
+        const txt = getReportText(r);
+        const snippet = txt ? txt.replace(/"/g, '&quot;') : '';
+        const isSif = (r.sif_potential == 1 || r.sif_potential === true);
+        return `
+        <tr class="picker-table-row">
+            <td><strong>${r.report_id}</strong></td>
+            <td>${r.site_location || '—'}</td>
+            <td>${r.department || '—'}</td>
+            <td>
+                <span class="verdict-tag ${isSif ? 'SIF_POTENTIAL' : 'NON_SIF_OBSERVATION'}" style="font-size: 10px; padding: 2px 8px;">
+                    ${isSif ? 'SIF Precursor' : 'Non-SIF'}
+                </span>
+            </td>
+            <td style="max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${snippet}">
+                ${txt}
+            </td>
+            <td>
+                <button type="button" class="btn btn-primary btn-sm" onclick="loadReportFromPicker('${r.report_id}')" style="font-size: 11px; padding: 4px 10px;">
+                    Load &amp; Classify
+                </button>
+            </td>
+        </tr>
+    `}).join('');
+}
+
+window.filterPickerReports = function() {
+    const query = (document.getElementById('pickerSearchInput')?.value || '').toLowerCase().trim();
+    const cat = document.getElementById('pickerCategoryFilter')?.value || 'ALL';
+
+    const filtered = masterReports.filter(r => {
+        const txt = getReportText(r).toLowerCase();
+        const matchesQuery = !query ||
+            r.report_id.toLowerCase().includes(query) ||
+            (r.site_location && r.site_location.toLowerCase().includes(query)) ||
+            (r.department && r.department.toLowerCase().includes(query)) ||
+            txt.includes(query) ||
+            (r.iogp_life_saving_rule && r.iogp_life_saving_rule.toLowerCase().includes(query));
+
+        let matchesCat = true;
+        if (cat === 'SIF') matchesCat = (r.sif_potential == 1 || r.sif_potential === true);
+        else if (cat === 'NON_SIF') matchesCat = !(r.sif_potential == 1 || r.sif_potential === true);
+        else if (cat !== 'ALL') {
+            matchesCat = r.iogp_life_saving_rule === cat || txt.includes(cat.toLowerCase());
+        }
+
+        return matchesQuery && matchesCat;
+    });
+
+    renderPickerTableRows(filtered);
+};
+
+window.loadReportFromPicker = function(reportId) {
+    const report = masterReports.find(r => r.report_id === reportId);
+    if (!report) return;
+
+    const classifierTabBtn = document.querySelector('.nav-item[data-tab="tab-classifier"]');
+    if (classifierTabBtn) classifierTabBtn.click();
+
+    const textarea = document.getElementById('classifierTextarea');
+    if (textarea) textarea.value = getReportText(report);
+
+    const dropdown = document.getElementById('classifierDatasetDropdown');
+    if (dropdown) dropdown.value = reportId;
+
+    closeReportPickerModal();
+    runClassification();
+};
+
+// ============================================================
+// DASHBOARD SUB-SECTION SWITCHER (DECLUTTERED VIEWS)
+// ============================================================
+window.switchDashSection = function(secName) {
+    const secOverview = document.getElementById('dashSecOverview');
+    const secBarriers = document.getElementById('dashSecBarriers');
+    const secPredictive = document.getElementById('dashSecPredictive');
+
+    const btnOverview = document.getElementById('btnDashSecOverview');
+    const btnBarriers = document.getElementById('btnDashSecBarriers');
+    const btnPredictive = document.getElementById('btnDashSecPredictive');
+    const btnAll = document.getElementById('btnDashSecAll');
+
+    [btnOverview, btnBarriers, btnPredictive, btnAll].forEach(b => b?.classList.remove('active'));
+
+    if (secName === 'overview') {
+        if (secOverview) secOverview.style.display = 'block';
+        if (secBarriers) secBarriers.style.display = 'none';
+        if (secPredictive) secPredictive.style.display = 'none';
+        btnOverview?.classList.add('active');
+    } else if (secName === 'barriers') {
+        if (secOverview) secOverview.style.display = 'none';
+        if (secBarriers) secBarriers.style.display = 'block';
+        if (secPredictive) secPredictive.style.display = 'none';
+        btnBarriers?.classList.add('active');
+    } else if (secName === 'predictive') {
+        if (secOverview) secOverview.style.display = 'none';
+        if (secBarriers) secBarriers.style.display = 'none';
+        if (secPredictive) secPredictive.style.display = 'block';
+        btnPredictive?.classList.add('active');
+    } else { // 'all'
+        if (secOverview) secOverview.style.display = 'block';
+        if (secBarriers) secBarriers.style.display = 'block';
+        if (secPredictive) secPredictive.style.display = 'block';
+        btnAll?.classList.add('active');
+    }
+};
+
+// ============================================================
+// UI & REPORT MULTILINGUAL LOCALIZATION (EN, HI, AS, BN, KN)
+// ============================================================
+window.changeLanguage = function(langCode) {
+    const langBadge = document.getElementById('langBadge');
+
+    const translations = {
+        en: {
+            badge: "Detected: English (Standard Domain)",
+            heroSub: "A structured system to distinguish Serious Injury & Fatality (SIF) precursors from routine low-severity observations — aligned with OISD-STD-105, DGMS OMR 2017, and the 10 IOGP Life-Saving Rules.",
+            tabHome: "Overview",
+            tabClassifier: "Incident Classifier",
+            tabOverview: "Dashboard",
+            tabDensity: "Site Risk Analysis",
+            tabIogp: "Compliance",
+            tabExplorer: "Reports",
+            selectReport: "Select Report from Dataset (60+ Oilfield Incidents):",
+            browsePicker: "Browse All 60+ Reports",
+            presetsLabel: "Quick High-Impact Scenario Presets:",
+            obsTextLabel: "Incident observation text:",
+            classifyBtn: "Classify Incident",
+            polishBtn: "AI Polish Narrative",
+            btnOverview: "Overview & Trends",
+            btnBarriers: "Barrier & Precursor Intelligence",
+            btnPredictive: "Predictive AI & Simulator",
+            btnAll: "View All Sections"
+        },
+        hi: {
+            badge: "पहचान: हिंदी (तेल क्षेत्र सुरक्षा)",
+            heroSub: "गंभीर चोट और मृत्यु (SIF) पूर्ववर्ती संकेतों को सामान्य कम-जोखिम वाली घटनाओं से अलग करने के लिए एक स्वचालित मंच — OISD-STD-105 और 10 IOGP जीवन रक्षक नियमों के अनुरूप।",
+            tabHome: "अवलोकन",
+            tabClassifier: "घटना वर्गीकरण",
+            tabOverview: "डैशबोर्ड",
+            tabDensity: "साइट जोखिम विश्लेषण",
+            tabIogp: "अनुपालन",
+            tabExplorer: "रिपोर्ट संग्रह",
+            selectReport: "डेटासेट से रिपोर्ट चुनें (60+ तेल क्षेत्र घटनाएं):",
+            browsePicker: "सभी 60+ रिपोर्ट देखें",
+            presetsLabel: "त्वरित उच्च-प्रभाव परिदृश्य:",
+            obsTextLabel: "घटना अवलोकन पाठ विवरण:",
+            classifyBtn: "घटना का वर्गीकरण करें",
+            polishBtn: "एआई पाठ सुधार",
+            btnOverview: "अवलोकन और रुझान",
+            btnBarriers: "अवरोध और पूर्वाभास विश्लेषण",
+            btnPredictive: "पूर्वानुमानित एआई और सिम्युलेटर",
+            btnAll: "सभी अनुभाग देखें"
+        },
+        as: {
+            badge: "চিনাক্ত কৰা হৈছে: অসমীয়া (অসম তৈল ক্ষেত্র)",
+            heroSub: "গুৰুতৰ আঘাত আৰু মৃত্যু (SIF) পূৰ্বসংকেতসমূহক সাধাৰণ কম-প্ৰভাৱৰ পৰ্যবেক্ষণৰ পৰা পৃথক কৰাৰ বাবে এটা স্বয়ংক্ৰিয় প্লেটফৰ্ম — OISD-STD-105 আৰু IOGP নিয়মৰ সৈতে সামঞ্জস্যপূৰ্ণ।",
+            tabHome: "অৱলোকন",
+            tabClassifier: "ঘটনা শ্ৰেণীবিভাজন",
+            tabOverview: "ড্যাশবৰ্ড",
+            tabDensity: "ঝুঁকি বিশ্লেষণ",
+            tabIogp: "অনুপালন",
+            tabExplorer: "প্ৰতিবেদন",
+            selectReport: "ডাটাসেটৰ পৰা প্ৰতিবেদন বাছনি কৰক (৬০+ তৈল ক্ষেত্ৰৰ ঘটনা):",
+            browsePicker: "সকলো ৬০+ প্ৰতিবেদন চাওক",
+            presetsLabel: "দ্রুত প্ৰভাৱশালী দৃশ্যপটসমূহ:",
+            obsTextLabel: "ঘটনা পৰ্যবেক্ষণৰ পাঠ:",
+            classifyBtn: "ঘটনা শ্ৰেণীবিভাজন কৰক",
+            polishBtn: "এআই পাঠ পৰিশোধন",
+            btnOverview: "অৱলোকন আৰু প্ৰৱণতা",
+            btnBarriers: "প্ৰতিবন্ধক আৰু পূৰ্বসংকেত বিশ্লেষণ",
+            btnPredictive: "পূৰ্বানুমান এআই আৰু চিমুলেটৰ",
+            btnAll: "সকলো খণ্ড চাওক"
+        },
+        bn: {
+            badge: "শনাক্তকরণ: বাংলা (পূর্বাঞ্চল তৈল ক্ষেত্র)",
+            heroSub: "গুরুতর আঘাত ও মৃত্যু (SIF) পূর্বসূরী সংকেতসমূহকে সাধারণ কম-ঝুঁকিপূর্ণ পর্যবেক্ষণ থেকে পৃথক করার স্বয়ংক্রিয় ব্যবস্থা — OISD-STD-105 এবং ১০টি IOGP জীবন রক্ষাকারী নিয়মের সাথে সামঞ্জস্যপূর্ণ।",
+            tabHome: "ওভারভিউ",
+            tabClassifier: "ঘটনা শ্রেণীবিন্যাস",
+            tabOverview: "ড্যাশবোর্ড",
+            tabDensity: "সাইট ঝুঁকি বিশ্লেষণ",
+            tabIogp: "অনুসরণ ও অনুপালন",
+            tabExplorer: "রিপোর্ট আর্কাইভ",
+            selectReport: "ডেটা সেট থেকে রিপোর্ট নির্বাচন করুন (৬০+ তেল ক্ষেত্র ঘটনা):",
+            browsePicker: "সমস্ত ৬০+ রিপোর্ট ব্রাউজ করুন",
+            presetsLabel: "দ্রুত উচ্চ-প্রভাবের ঘটনা চিত্র:",
+            obsTextLabel: "ঘটনা পর্যবেক্ষণের বিবরণ পাঠ:",
+            classifyBtn: "ঘটনা শ্রেণীবিন্যাস করুন",
+            polishBtn: "এআই পাঠ সংশোধন",
+            btnOverview: "ওভারভিউ ও ট্রেন্ডস",
+            btnBarriers: "ব্যারিয়ার ও পূর্বাভাস বিশ্লেষণ",
+            btnPredictive: "প্রেডিক্টিভ এআই ও সিমুলেটর",
+            btnAll: "সমস্ত বিভাগ দেখুন"
+        },
+        kn: {
+            badge: "ಗುರುತಿಸಲಾಗಿದೆ: ಕನ್ನಡ (ಕೆಜಿ ಬಸಿನ್)",
+            heroSub: "ತೀವ್ರ ಗಾಯ ಮತ್ತು ಮರಣ (SIF) ಮುನ್ಸೂಚನೆಗಳನ್ನು ವಾಡಿಕೆಯ ಕಡಿಮೆ-ತೀವ್ರತೆಯ ವೀಕ್ಷಣೆಗಳಿಂದ ಪ್ರತ್ಯೇಕಿಸಲು ಸ್ವಯಂಚಾಲಿತ ವೇದಿಕೆ — OISD-STD-105 ಮತ್ತು IOGP ನಿಯಮಗಳಿಗೆ ಅನುಗುಣವಾಗಿದೆ.",
+            tabHome: "ಅವಲೋಕನ",
+            tabClassifier: "ಘಟನೆ ವರ್ಗೀಕರಣ",
+            tabOverview: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+            tabDensity: "ಸೈಟ್ ಅಪಾಯ ವಿಶ್ಲೇಷಣೆ",
+            tabIogp: "ಅನುಸರಣೆ",
+            tabExplorer: "ವರದಿಗಳು",
+            selectReport: "ಡೇಟಾಸೆಟ್‌ನಿಂದ ವರದಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ (60+ ತೈಲಕ್ಷೇತ್ರ ಘಟನೆಗಳು):",
+            browsePicker: "ಎಲ್ಲಾ 60+ ವರದಿಗಳನ್ನು ವೀಕ್ಷಿಸಿ",
+            presetsLabel: "ತ್ವರಿತ ಹೆಚ್ಚಿನ ಪರಿಣಾಮದ ಸನ್ನಿವೇಶಗಳು:",
+            obsTextLabel: "ಘಟನೆಯ ವೀಕ್ಷಣೆಯ ಪಠ್ಯ ವಿವರಣೆ:",
+            classifyBtn: "ಘಟನೆಯನ್ನು ವರ್ಗೀಕರಿಸಿ",
+            polishBtn: "ಎಐ ಪಠ್ಯ ಪರಿಷ್ಕರಣೆ",
+            btnOverview: "ಅವಲೋಕನ ಮತ್ತು ಪ್ರವೃತ್ತಿಗಳು",
+            btnBarriers: "ತಡೆಗೋಡೆ ಮತ್ತು ಮುನ್ಸೂಚಕ ವಿಶ್ಲೇಷಣೆ",
+            btnPredictive: "ಮುನ್ಸೂಚನಾ ಎಐ ಮತ್ತು ಸಿಮ್ಯುಲೇಟರ್",
+            btnAll: "ಎಲ್ಲಾ ವಿಭಾಗಗಳನ್ನು ವೀಕ್ಷಿಸಿ"
+        }
+    };
+
+    const dict = translations[langCode] || translations.en;
+    if (langBadge) langBadge.textContent = dict.badge;
+
+    const heroSub = document.querySelector('.hero-subtitle');
+    if (heroSub) heroSub.textContent = dict.heroSub;
+
+    // Update Tab Navigation labels
+    document.querySelectorAll('.nav-links-menu .nav-item').forEach(btn => {
+        const tab = btn.getAttribute('data-tab');
+        const span = btn.querySelector('span');
+        if (span && tab === 'tab-home' && dict.tabHome) span.textContent = dict.tabHome;
+        if (span && tab === 'tab-classifier' && dict.tabClassifier) span.textContent = dict.tabClassifier;
+        if (span && tab === 'tab-overview' && dict.tabOverview) span.textContent = dict.tabOverview;
+        if (span && tab === 'tab-density' && dict.tabDensity) span.textContent = dict.tabDensity;
+        if (span && tab === 'tab-iogp' && dict.tabIogp) span.textContent = dict.tabIogp;
+        if (span && tab === 'tab-explorer' && dict.tabExplorer) span.textContent = dict.tabExplorer;
+    });
+
+    // Classifier elements
+    const selectReportLabel = document.getElementById('selectReportLabel');
+    if (selectReportLabel) selectReportLabel.innerHTML = `<strong>${dict.selectReport}</strong>`;
+    const btnBrowsePicker = document.getElementById('btnBrowsePicker');
+    if (btnBrowsePicker) btnBrowsePicker.textContent = dict.browsePicker;
+    const presetsLabel = document.getElementById('presetsLabel');
+    if (presetsLabel) presetsLabel.textContent = dict.presetsLabel;
+    const obsTextLabel = document.getElementById('obsTextLabel');
+    if (obsTextLabel) obsTextLabel.innerHTML = `<strong>${dict.obsTextLabel}</strong>`;
+    const classifyBtnTxt = document.getElementById('classifyBtnTxt');
+    if (classifyBtnTxt) classifyBtnTxt.textContent = dict.classifyBtn;
+    const polishBtn = document.getElementById('polishBtn');
+    if (polishBtn) polishBtn.textContent = dict.polishBtn;
+
+    // Dashboard switcher buttons
+    const btnOverview = document.getElementById('btnDashSecOverview');
+    if (btnOverview) btnOverview.textContent = dict.btnOverview;
+    const btnBarriers = document.getElementById('btnDashSecBarriers');
+    if (btnBarriers) btnBarriers.textContent = dict.btnBarriers;
+    const btnPredictive = document.getElementById('btnDashSecPredictive');
+    if (btnPredictive) btnPredictive.textContent = dict.btnPredictive;
+    const btnAll = document.getElementById('btnDashSecAll');
+    if (btnAll) btnAll.textContent = dict.btnAll;
+
+    showToast(`Language switched to ${langCode.toUpperCase()}`, 'info');
+};
+
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-left: 4px solid ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f59e0b'}; border-radius: 6px; padding: 10px 16px; font-size: 12px; font-weight: 600; box-shadow: var(--shadow-lg); transition: opacity 0.3s; opacity: 1; pointer-events: auto; display: flex; align-items: center; gap: 8px;`;
+    toast.innerHTML = `<span>[${type.toUpperCase()}] ${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+
+
 
