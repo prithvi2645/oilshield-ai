@@ -2713,6 +2713,65 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// ============================================================
+// SAVE & REGISTER REPORT FROM INCIDENT CLASSIFIER TO DATASET
+// ============================================================
+window.saveClassifierReportToDataset = async function() {
+    const textarea = document.getElementById('classifierTextarea');
+    const text = textarea ? textarea.value.trim() : '';
+
+    if (!text) {
+        alert('Please enter or select an observation text first.');
+        return;
+    }
+
+    const btn = document.getElementById('saveFromClassifierBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Registering...';
+    }
+
+    try {
+        const payload = {
+            date: new Date().toISOString().split('T')[0],
+            site_location: 'Baghjan Field #5',
+            department: 'Workover & Operations',
+            observation_type: 'Unsafe Condition',
+            description: text
+        };
+
+        const res = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to register report.');
+
+        const saved = data.report;
+        showToast(`Report ${saved.report_id} successfully registered into live dataset!`, 'success');
+
+        // Refresh master dataset, analytics & knowledge graph
+        await fetchReports();
+        await fetchAnalytics();
+        fetchKnowledgeGraph();
+
+        // Populate dropdown with new report selected
+        const dropdown = document.getElementById('classifierDatasetDropdown');
+        if (dropdown) dropdown.value = saved.report_id;
+
+    } catch (err) {
+        console.error('Failed to register report from classifier:', err);
+        showToast(`Registration failed: ${err.message}`, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Register as Official Report';
+        }
+    }
+};
+
 
 
 

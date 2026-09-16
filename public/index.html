@@ -715,13 +715,16 @@
                         </div>
                         <textarea id="classifierTextarea" rows="5" placeholder="Enter the full text of the safety observation or incident report here...">During workover operations at Baghjan, 2-inch Chiksan line surged to 2400 PSI while whip check cable was unsecured.</textarea>
 
-                        <div style="display: flex; gap: 10px; margin-top: 12px;">
-                            <button class="btn btn-primary btn-large" id="analyzeBtn" style="flex: 1;">
+                        <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
+                            <button class="btn btn-primary btn-large" id="analyzeBtn" style="flex: 1; min-width: 160px;">
                                 <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 <span id="classifyBtnTxt">Classify Incident</span>
                             </button>
                             <button class="btn btn-secondary" id="polishBtn" type="button" onclick="enhanceClassifierText()" title="AI Narrative Polish: Expand vague text into structured HSE report">
                                 AI Polish Narrative
+                            </button>
+                            <button class="btn btn-secondary" id="saveFromClassifierBtn" type="button" onclick="saveClassifierReportToDataset()" title="Save &amp; Register as Official Report into Live Dataset CSV" style="font-weight: 700; color: var(--amber); border-color: var(--amber);">
+                                Register as Official Report
                             </button>
                         </div>
                     </div>
