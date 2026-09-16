@@ -122,6 +122,16 @@ window.selectRoleCard = function(role) {
     });
 };
 
+function getRoleDisplayName(role) {
+    const names = {
+        'hse_manager': 'HSE Manager (Corporate)',
+        'site_manager': 'Site Manager',
+        'supervisor': 'Field Supervisor',
+        'analyst': 'Safety Analyst'
+    };
+    return names[role] || 'HSE Officer';
+}
+
 window.handleLoginSubmit = function(e) {
     if (e) e.preventDefault();
     const activeRoleBtn = document.querySelector('.role-card-btn.active');
@@ -131,7 +141,7 @@ window.handleLoginSubmit = function(e) {
     const modal = document.getElementById('roleModalOverlay');
     if (modal) modal.style.display = 'none';
     applyRoleAccess(currentRole);
-    showToast(`Logged in successfully as ${getRoleDisplayName(currentRole)}`, 'success');
+    showToast(`Logged in as ${getRoleDisplayName(currentRole)}`, 'success');
 };
 
 
@@ -231,10 +241,10 @@ function applyRoleAccess(role) {
         if (kgCard) kgCard.style.display = 'none';
         if (analyzeBtn) analyzeBtn.disabled = false;
     } else if (role === 'supervisor') {
-        // Hide Dashboard, Site Risk, Compliance tabs
+        // Field Supervisor: hide Dashboard, Site Risk, Compliance, Review Queue tabs
         document.querySelectorAll('.nav-item').forEach(el => {
             const tab = el.getAttribute('data-tab');
-            if (['tab-overview', 'tab-density', 'tab-iogp'].includes(tab)) {
+            if (['tab-overview', 'tab-density', 'tab-iogp', 'tab-review-queue'].includes(tab)) {
                 el.style.display = 'none';
             } else {
                 el.style.display = 'inline-flex';
@@ -280,6 +290,20 @@ function switchTab(targetTabId) {
             renderDensityDetailChart(analyticsData.site_rankings || []);
         } else if (targetTabId === 'tab-iogp') {
             renderIogpDetailChart(analyticsData.lsr_distribution || {});
+        }
+    }
+
+    // Auto-load tab-specific data
+    if (targetTabId === 'tab-review-queue') {
+        fetchReviewQueue();
+    }
+    if (targetTabId === 'tab-ask-ai') {
+        const thread = document.getElementById('askAiThread');
+        if (thread && !thread.querySelector('.ask-ai-bubble')) {
+            // Ensure welcome message is shown if no chat history
+            if (!thread.querySelector('.ask-ai-welcome') && thread.children.length === 0) {
+                thread.innerHTML = '<div class="ask-ai-welcome"><p style="color:var(--text-muted);font-size:13px;text-align:center;margin:32px 0;">Ask a question above to query the live OIL safety dataset. All answers are derived directly from the data — no AI guessing.</p></div>';
+            }
         }
     }
 
@@ -2168,7 +2192,7 @@ async function enhanceClassifierText(targetId = 'classifierTextarea') {
 
             // If polishing the main classifier textarea, automatically re-classify to update UI cards
             if (targetId === 'classifierTextarea') {
-                classifyIncident();
+                if (typeof window.classifyIncident === 'function') window.classifyIncident();
             }
         }
     } catch (err) {
