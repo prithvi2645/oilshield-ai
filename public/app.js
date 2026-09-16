@@ -2723,20 +2723,19 @@ function renderHseReviewQueue() {
     const tbody = document.getElementById('reviewQueueBody');
     if (!tbody) return;
 
-    // Filter reports requiring human validation:
-    // 1. Explicitly marked PENDING_REVIEW
-    // 2. Newly created reports via classifier form (new_report_submission)
-    // 3. Unvalidated SIF potential items (sif_potential == 1 or sif_severity_score >= 0.70)
-    const queueItems = (masterReports || []).filter(r => {
-        if (r.review_status === 'HUMAN_VALIDATED') return false;
-        const score = parseFloat(r.sif_severity_score || r.risk_score || 0);
-        const normScore = score > 1 ? score / 100 : score;
-        return r.review_status === 'PENDING_REVIEW' ||
-               r.created_via === 'new_report_submission' ||
-               r.is_new === true ||
-               r.sif_potential == 1 ||
-               normScore >= 0.50;
-    });
+    if (!masterReports || masterReports.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 28px; color: var(--text-muted);">
+                    <div style="font-size: 14px; font-weight: 600;">Loading Oil India Safety Observations...</div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Include all reports that haven't been validated by human review yet
+    const queueItems = masterReports.filter(r => r.review_status !== 'HUMAN_VALIDATED');
 
     const countBadge = document.getElementById('reviewQueueCountBadge');
     if (countBadge) {
@@ -2756,12 +2755,14 @@ function renderHseReviewQueue() {
         return;
     }
 
-    tbody.innerHTML = queueItems.map(r => {
+    const displayItems = queueItems.slice(0, 30);
+
+    tbody.innerHTML = displayItems.map(r => {
         const scoreVal = parseFloat(r.sif_severity_score || 0);
         const scorePct = Math.round(scoreVal > 1 ? scoreVal : scoreVal * 100);
         const flagReason = r.created_via === 'new_report_submission' || r.is_new
             ? 'New Field Submission'
-            : (r.sif_potential == 1 ? `High SIF Precursor (${scorePct}%)` : `Moderate Risk (${scorePct}%)`);
+            : (r.sif_potential == 1 || r.sif_potential == '1' ? `High SIF Precursor (${scorePct}%)` : `Moderate Risk (${scorePct}%)`);
 
         return `
             <tr>
@@ -2773,8 +2774,8 @@ function renderHseReviewQueue() {
                 <td><span class="pill-sif" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); font-size: 11px; padding: 3px 8px; border-radius: 12px;">${flagReason}</span></td>
                 <td>
                     <div style="display: flex; gap: 6px;">
-                        <button class="btn btn-sm" onclick="approveReviewItem('${r.report_id}', true)" style="background: #10B981; color: #fff; padding: 4px 10px; font-size: 11px; font-weight: 600;">Approve SIF</button>
-                        <button class="btn btn-sm" onclick="approveReviewItem('${r.report_id}', false)" style="background: #64748B; color: #fff; padding: 4px 10px; font-size: 11px; font-weight: 600;">Reclassify Non-SIF</button>
+                        <button class="btn btn-sm" onclick="approveReviewItem('${r.report_id}', true)" style="background: #10B981; color: #fff; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">Approve SIF</button>
+                        <button class="btn btn-sm" onclick="approveReviewItem('${r.report_id}', false)" style="background: #64748B; color: #fff; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;">Reclassify Non-SIF</button>
                     </div>
                 </td>
             </tr>
