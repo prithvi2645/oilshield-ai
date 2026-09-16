@@ -2716,7 +2716,7 @@ function showToast(message, type = 'info') {
 // ============================================================
 // SAVE & REGISTER REPORT FROM INCIDENT CLASSIFIER TO DATASET
 // ============================================================
-window.saveClassifierReportToDataset = async function() {
+window.saveClassifierReportToDataset = function() {
     const textarea = document.getElementById('classifierTextarea');
     const text = textarea ? textarea.value.trim() : '';
 
@@ -2725,51 +2725,44 @@ window.saveClassifierReportToDataset = async function() {
         return;
     }
 
-    const btn = document.getElementById('saveFromClassifierBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Registering...';
+    // 1. Pre-fill official report form in tab-explorer
+    const descInput = document.getElementById('newReportDescription');
+    if (descInput) descInput.value = text;
+
+    const titleInput = document.getElementById('newReportTitle');
+    if (titleInput && (!titleInput.value || titleInput.value.trim() === '')) {
+        titleInput.value = text.slice(0, 55) + (text.length > 55 ? '...' : '');
     }
 
-    try {
-        const payload = {
-            date: new Date().toISOString().split('T')[0],
-            site_location: 'Baghjan Field #5',
-            department: 'Workover & Operations',
-            observation_type: 'Unsafe Condition',
-            description: text
-        };
-
-        const res = await fetch('/api/reports', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to register report.');
-
-        const saved = data.report;
-        showToast(`Report ${saved.report_id} successfully registered into live dataset!`, 'success');
-
-        // Refresh master dataset, analytics & knowledge graph
-        await fetchReports();
-        await fetchAnalytics();
-        fetchKnowledgeGraph();
-
-        // Populate dropdown with new report selected
-        const dropdown = document.getElementById('classifierDatasetDropdown');
-        if (dropdown) dropdown.value = saved.report_id;
-
-    } catch (err) {
-        console.error('Failed to register report from classifier:', err);
-        showToast(`Registration failed: ${err.message}`, 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Register as Official Report';
-        }
+    const dateInput = document.getElementById('newReportDate');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
     }
+
+    const selectedReportId = document.getElementById('classifierDatasetDropdown')?.value;
+    const activeReportObj = masterReports.find(r => r.report_id === selectedReportId);
+
+    const siteInput = document.getElementById('newReportSite');
+    if (siteInput) siteInput.value = activeReportObj?.site_location || 'Baghjan Field #5';
+
+    const deptInput = document.getElementById('newReportDepartment');
+    if (deptInput) deptInput.value = activeReportObj?.department || 'Workover & Operations';
+
+    const typeSelect = document.getElementById('newReportType');
+    if (typeSelect && !typeSelect.value) typeSelect.value = 'Unsafe Condition';
+
+    const actInput = document.getElementById('newReportActivity');
+    if (actInput && !actInput.value) actInput.value = 'Well Operations & Maintenance';
+
+    // 2. Switch tab to tab-explorer & scroll to form
+    switchTab('tab-explorer');
+
+    const card = document.getElementById('newReportCard');
+    if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    showToast('Observation transferred to Official Safety Report Form. Review site details & click Save!', 'success');
 };
 
 

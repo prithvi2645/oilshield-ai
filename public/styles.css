@@ -3544,15 +3544,22 @@ body.dark-mode .hse-summary-modal {
    STRICT PRINT ENGINE STYLING (@media print)
    ============================================================ */
 @media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
     html, body {
         background: #FFFFFF !important;
         color: #000000 !important;
         width: 100% !important;
         height: auto !important;
-        min-height: auto !important;
+        min-height: 100% !important;
         overflow: visible !important;
         margin: 0 !important;
         padding: 0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 
     body > *:not(#hseSummaryModalOverlay) {
@@ -3561,23 +3568,29 @@ body.dark-mode .hse-summary-modal {
 
     #hseSummaryModalOverlay {
         display: block !important;
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
         width: 100% !important;
         height: auto !important;
         background: #FFFFFF !important;
         backdrop-filter: none !important;
         box-shadow: none !important;
-        z-index: 99999 !important;
+        z-index: 999999 !important;
         padding: 0 !important;
         margin: 0 !important;
         opacity: 1 !important;
         visibility: visible !important;
+        overflow: visible !important;
     }
 
-    .hse-summary-modal {
+    .confirm-modal, .hse-summary-modal, .hse-print-document {
+        display: block !important;
         position: relative !important;
+        top: auto !important;
+        left: auto !important;
         max-width: 100% !important;
         width: 100% !important;
         border: none !important;
@@ -3587,10 +3600,10 @@ body.dark-mode .hse-summary-modal {
         margin: 0 !important;
         padding: 0 !important;
         border-radius: 0 !important;
-        display: block !important;
+        overflow: visible !important;
     }
 
-    .no-print, .modal-top-actions, .confirm-modal-actions, .drawer-close-btn {
+    .no-print, .modal-top-actions, .confirm-modal-actions, .drawer-close-btn, .header-utilities, .corp-header {
         display: none !important;
     }
 
@@ -3602,31 +3615,30 @@ body.dark-mode .hse-summary-modal {
         padding: 0 !important;
     }
 
-    .doc-box, .d-kpi, .doc-card-item, .doc-dir-item, .doc-table th {
+    .doc-box, .d-kpi, .doc-card-item, .doc-dir-item, .doc-table th, .signoff-box {
         background: #F8FAFC !important;
         color: #000000 !important;
         border: 1px solid #CBD5E1 !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
 
     .doc-sec-title {
-        color: #F97316 !important;
-        border-bottom-color: #000000 !important;
+        color: #EA580C !important;
+        border-bottom: 2px solid #000000 !important;
     }
 
     .oil-emblem-lg {
-        background: #F97316 !important;
+        background: #EA580C !important;
         color: #FFFFFF !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
 
     .doc-section {
+        break-inside: avoid;
         page-break-inside: avoid;
-    }
-
-    @page {
-        size: A4 portrait;
-        margin: 12mm;
+        margin-bottom: 20px;
     }
 }
 
