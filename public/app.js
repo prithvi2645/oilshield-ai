@@ -67,6 +67,7 @@ function initRoleControl() {
         currentRole = storedRole;
         if (modal) modal.style.display = 'none';
         applyRoleAccess(currentRole);
+        switchTab('tab-home');
     }
 
     // Role modal selection buttons
@@ -141,6 +142,7 @@ window.handleLoginSubmit = function(e) {
     const modal = document.getElementById('roleModalOverlay');
     if (modal) modal.style.display = 'none';
     applyRoleAccess(currentRole);
+    switchTab('tab-home');
     showToast(`Logged in as ${getRoleDisplayName(currentRole)}`, 'success');
 };
 
