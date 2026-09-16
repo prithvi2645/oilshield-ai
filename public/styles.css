@@ -354,6 +354,9 @@ body {
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+/* Safety fallback: tab-home always visible unless JS hides it */
+#tab-home { display: block; }
+#tab-home.active { display: block; }
 
 /* ============================================================
    HOME PAGE
@@ -2086,7 +2089,7 @@ body.dark-mode .corp-table tbody tr:nth-child(even) { background: rgba(255, 255,
     background: rgba(15, 23, 42, 0.75);
     backdrop-filter: blur(6px);
     z-index: 9999;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     padding: var(--space-md);

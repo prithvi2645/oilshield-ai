@@ -273,13 +273,22 @@ function setupTabNavigation() {
 }
 
 function switchTab(targetTabId) {
+    // Remove active class from all nav buttons
     document.querySelectorAll('.nav-item, .tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
+    // Hide ALL tab-content divs using inline style (overrides any CSS default)
+    document.querySelectorAll('.tab-content').forEach(c => {
+        c.classList.remove('active');
+        c.style.display = 'none';
+    });
+
+    // Show the target tab
     document.querySelectorAll(`[data-tab="${targetTabId}"]`).forEach(btn => btn.classList.add('active'));
-
     const tabContent = document.getElementById(targetTabId);
-    if (tabContent) tabContent.classList.add('active');
+    if (tabContent) {
+        tabContent.classList.add('active');
+        tabContent.style.display = 'block';
+    }
 
     // Re-render charts when tab is switched (ensures correct responsive width)
     if (analyticsData) {
