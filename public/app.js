@@ -32,6 +32,26 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAnalytics();
     fetchReports();
     fetchKnowledgeGraph();
+
+    // ── PRINT ENGINE FIX: Force Executive Brief modal visible during print ──
+    window.addEventListener('beforeprint', () => {
+        const briefModal = document.getElementById('hseSummaryModalOverlay');
+        if (briefModal) {
+            briefModal.setAttribute('data-pre-print-display', briefModal.style.display || 'none');
+            briefModal.style.setProperty('display', 'block', 'important');
+            briefModal.style.setProperty('position', 'relative', 'important');
+            briefModal.style.setProperty('background', '#ffffff', 'important');
+        }
+    });
+    window.addEventListener('afterprint', () => {
+        const briefModal = document.getElementById('hseSummaryModalOverlay');
+        if (briefModal) {
+            const prev = briefModal.getAttribute('data-pre-print-display') || 'none';
+            briefModal.style.display = prev;
+            briefModal.style.removeProperty('position');
+            briefModal.style.removeProperty('background');
+        }
+    });
 });
 
 // ============================================================
@@ -1471,70 +1491,48 @@ async function runSafetySimulation(barrierKey) {
     }
 }
 
-// ── EXECUTIVE HSE SUMMARY MODAL ──────────────────────────────────────────────
-async function openHseExecutiveSummaryModal() {
-    const modal = document.getElementById('hseSummaryModalOverlay');
-    if (!modal) return;
-    modal.style.display = 'flex';
-
-    try {
-        const response = await fetch('/api/hse-summary');
-        const data = await response.json();
-
-        document.getElementById('hseModalTitle').textContent = data.title || 'OIL Safety Intelligence Brief';
-        document.getElementById('hseModalSummaryTxt').textContent = data.executive_summary_text || '';
-
-        const grid = document.getElementById('hseModalSectionsGrid');
-        if (grid) {
-            grid.innerHTML = `
-                <div style="background:rgba(30,41,59,0.7); padding:10px; border-radius:6px; margin-bottom:10px;">
-                    <strong style="color:#38bdf8; font-size:11px; text-transform:uppercase;">Leadership Recommendations:</strong>
-                    <ul style="margin:6px 0 0 16px; color:#cbd5e1; font-size:11px; line-height:1.5;">
-                        ${(data.leadership_recommendations || []).map(r => `<li>${r}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-    } catch (err) {
-        console.error("Failed to fetch HSE summary:", err);
-    }
-}
-
-function closeHseExecutiveSummaryModal() {
-    const modal = document.getElementById('hseSummaryModalOverlay');
-    if (modal) modal.style.display = 'none';
-}
-
-// ── AI NARRATIVE ENHANCER ───────────────────────────────────────────────────
+// ── AI NARRATIVE ENHANCER (ALL REPORTS — Dataset browsed or typed) ─────────
 async function enhanceClassifierText() {
     const textarea = document.getElementById('classifierTextarea');
-    if (!textarea || !textarea.value.trim()) return;
+    const polishBtn = document.getElementById('polishBtn');
+    const text = textarea ? textarea.value.trim() : '';
+
+    if (!text) {
+        showToast('Please enter or load a report observation first, then AI Polish.', 'error');
+        return;
+    }
+
+    // Show loading state on button
+    const originalLabel = polishBtn ? polishBtn.textContent : 'AI Polish Narrative';
+    if (polishBtn) {
+        polishBtn.textContent = 'Polishing...';
+        polishBtn.disabled = true;
+    }
 
     try {
         const response = await fetch('/api/enhance-narrative', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: textarea.value.trim() })
+            body: JSON.stringify({ text })
         });
         const res = await response.json();
         if (res.enhanced) {
             textarea.value = res.enhanced;
+            showToast('Narrative polished by AI. Ready for classification.', 'success');
+            // Auto re-run classification with polished text
+            runClassification();
+        } else {
+            showToast('AI polish returned empty response. Try again.', 'error');
         }
     } catch (err) {
-        console.error("Failed to enhance narrative:", err);
+        console.error('Failed to enhance narrative:', err);
+        showToast('AI Polish failed — server may be offline.', 'error');
+    } finally {
+        if (polishBtn) {
+            polishBtn.textContent = originalLabel;
+            polishBtn.disabled = false;
+        }
     }
-}
-
-// ── MULTILINGUAL LANGUAGE SWITCHER ─────────────────────────────────────────
-function changeLanguage(langCode) {
-    const badge = document.getElementById('langBadge');
-    const labels = {
-        'en': 'Detected: English (Standard Domain)',
-        'hi': 'Detected: Hindi / Hinglish',
-        'as': 'Detected: Assamese (OIL Assam Assets)',
-        'kn': 'Detected: Kannada (KG Basin Asset)'
-    };
-    if (badge) badge.textContent = labels[langCode] || 'Detected: English';
 }
 
 // ── HITL REVIEW CONFIRMATION ───────────────────────────────────────────────
@@ -2446,12 +2444,15 @@ function renderPickerTableRows(reports) {
                     ${isSif ? 'SIF Precursor' : 'Non-SIF'}
                 </span>
             </td>
-            <td style="max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${snippet}">
-                ${txt}
+            <td style="max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${snippet}">
+                ${txt.slice(0, 80)}...
             </td>
-            <td>
-                <button type="button" class="btn btn-primary btn-sm" onclick="loadReportFromPicker('${r.report_id}')" style="font-size: 11px; padding: 4px 10px;">
+            <td style="white-space: nowrap;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="loadReportFromPicker('${r.report_id}')" style="font-size: 11px; padding: 4px 8px; margin-right: 4px;">
                     Load &amp; Classify
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="loadReportFromPickerAndPolish('${r.report_id}')" style="font-size: 11px; padding: 4px 8px; color: var(--amber); border-color: var(--amber);" title="Load this report and run AI narrative polish">
+                    AI Polish
                 </button>
             </td>
         </tr>
@@ -2499,6 +2500,27 @@ window.loadReportFromPicker = function(reportId) {
 
     closeReportPickerModal();
     runClassification();
+};
+
+window.loadReportFromPickerAndPolish = async function(reportId) {
+    const report = masterReports.find(r => r.report_id === reportId);
+    if (!report) return;
+
+    // Switch to classifier tab
+    const classifierTabBtn = document.querySelector('.nav-item[data-tab="tab-classifier"]');
+    if (classifierTabBtn) classifierTabBtn.click();
+
+    const textarea = document.getElementById('classifierTextarea');
+    if (textarea) textarea.value = getReportText(report);
+
+    const dropdown = document.getElementById('classifierDatasetDropdown');
+    if (dropdown) dropdown.value = reportId;
+
+    closeReportPickerModal();
+
+    // Show status and polish
+    showToast(`Loaded report ${reportId}. Running AI Polish...`, 'info');
+    await enhanceClassifierText();
 };
 
 // ============================================================
