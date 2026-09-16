@@ -1123,7 +1123,103 @@
                 </div>
             </div>
 
+            <!-- ============================================================
+                 KNOWLEDGE GRAPH — SIF PRECURSOR CAUSAL MIND MAP (D3.js)
+            ============================================================ -->
+            <div class="corp-card" id="knowledgeGraphCard" style="margin-bottom: var(--space-lg);">
+                <div class="card-title kg-card-header">
+                    <div>
+                        <h3>SIF Precursor Causal Knowledge Graph</h3>
+                        <p class="card-subtitle">Relational mapping of Departments → Life-Saving Rules → Barrier Failures → Precursor Patterns across all 500 OIL field observations</p>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <span class="kg-notebook-badge">NotebookLM Style</span>
+                        <span class="badge">D3.js v7 Force Network</span>
+                    </div>
+                </div>
+
+                <!-- Toolbar: Layout mode + Search + Zoom -->
+                <div class="kg-toolbar">
+                    <div class="kg-view-toggle">
+                        <button class="kg-mode-btn active" id="btnKgMindmap" onclick="setKgLayoutMode('mindmap')">Mind Map</button>
+                        <button class="kg-mode-btn" id="btnKgFlowchart" onclick="setKgLayoutMode('flowchart')">Flowchart</button>
+                        <button class="kg-mode-btn" id="btnKgForce" onclick="setKgLayoutMode('force')">Force Network</button>
+                    </div>
+                    <div class="kg-search-wrap">
+                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="Search nodes (department, rule, barrier...)" oninput="handleKgSearch(this.value)" id="kgSearchInput">
+                    </div>
+                    <div class="kg-zoom-controls">
+                        <button class="btn btn-secondary btn-sm" onclick="zoomKg(1.3)" title="Zoom In">+</button>
+                        <button class="btn btn-secondary btn-sm" onclick="zoomKg(0.77)" title="Zoom Out">−</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetKgZoom()" title="Reset View">Reset</button>
+                    </div>
+                </div>
+
+                <!-- SVG Canvas -->
+                <div class="kg-holder">
+                    <svg id="knowledgeGraphSvg" style="width:100%; height:540px; display:block;"></svg>
+                </div>
+
+                <!-- Legend Strip -->
+                <div class="kg-legend-strip">
+                    <span class="kg-tag kg-dept"><span class="dot"></span>Department</span>
+                    <span class="kg-tag kg-lsr"><span class="dot"></span>Life-Saving Rule</span>
+                    <span class="kg-tag kg-barrier"><span class="dot"></span>Barrier Failure</span>
+                    <span class="kg-tag kg-pattern"><span class="dot"></span>Precursor Pattern</span>
+                    <span style="font-size:10px; color:var(--text-muted); margin-left:auto;">Click any node to inspect linked incidents &bull; Drag to pan &bull; Scroll to zoom</span>
+                </div>
+            </div>
+
         </div><!-- /tab-overview -->
+
+    <!-- KG Inspector Slide-Out Drawer -->
+    <div class="kg-inspector-drawer" id="kgInspectorDrawer">
+        <div class="drawer-header">
+            <div>
+                <div class="drawer-node-name" id="inspNodeName">Node Name</div>
+                <span class="drawer-group-badge" id="inspGroupBadge">Group</span>
+            </div>
+            <button class="drawer-close-btn" onclick="closeKgInspector()">&times;</button>
+        </div>
+        <div class="drawer-stats-grid">
+            <div class="drawer-stat">
+                <span class="lbl">Total Incidents</span>
+                <span class="val" id="inspTotalIncidents">0</span>
+            </div>
+            <div class="drawer-stat">
+                <span class="lbl">SIF Precursors</span>
+                <span class="val" id="inspSifCount" style="color:var(--amber);">0</span>
+            </div>
+            <div class="drawer-stat">
+                <span class="lbl">Avg. Severity</span>
+                <span class="val" id="inspAvgSeverity">0%</span>
+            </div>
+            <div class="drawer-stat">
+                <span class="lbl">Top Affected Site</span>
+                <span class="val" id="inspTopSite">N/A</span>
+            </div>
+        </div>
+        <div class="drawer-report-label">Linked Incident Snapshots:</div>
+        <div class="drawer-report-list" id="inspReportList">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- Report Hover Popover (KG node hover) -->
+    <div class="report-hover-popover" id="reportHoverPopover">
+        <div class="popover-header">
+            <span class="popover-id" id="popoverReportId">OIL-HSE-RPT</span>
+            <span class="popover-sif" id="popoverSifBadge">SIF Potential</span>
+            <span class="popover-date" id="popoverDate">2026</span>
+        </div>
+        <div class="popover-title" id="popoverTitle">Report Title</div>
+        <div class="popover-row"><span class="lbl">Site:</span><span id="popoverSite">—</span></div>
+        <div class="popover-row"><span class="lbl">Dept:</span><span id="popoverDept">—</span></div>
+        <div class="popover-desc" id="popoverDesc">Observation narrative...</div>
+        <div class="popover-row"><span class="lbl">Activity:</span><span id="popoverActivity">—</span></div>
+        <div class="popover-row"><span class="lbl">Action:</span><span id="popoverAction">—</span></div>
+    </div>
 
 
         <!-- ============================================================
