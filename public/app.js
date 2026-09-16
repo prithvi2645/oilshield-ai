@@ -2788,5 +2788,189 @@ window.saveClassifierReportToDataset = function() {
 };
 
 
+// ============================================================
+// HSE ASK AI — NATURAL LANGUAGE ANALYTICS ENGINE
+// ============================================================
+const askAiHistory = [];
+
+async function sendAskAi() {
+    const input = document.getElementById('askAiInput');
+    const btn = document.getElementById('askAiBtn');
+    const thread = document.getElementById('askAiThread');
+    const question = input ? input.value.trim() : '';
+    if (!question) return;
+
+    // Clear welcome message on first question
+    const welcome = thread.querySelector('.ask-ai-welcome');
+    if (welcome) welcome.remove();
+
+    // Append user bubble
+    thread.innerHTML += `
+        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+            <div style="background:var(--accent); color:#fff; padding:10px 14px; border-radius:12px 12px 2px 12px; max-width:75%; font-size:13px; font-weight:600;">${escapeHtml(question)}</div>
+        </div>`;
+    thread.scrollTop = thread.scrollHeight;
+
+    input.value = '';
+    btn.textContent = 'Thinking...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/ask-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+
+        // Format markdown bold
+        const formattedAnswer = (data.answer || 'No answer returned.').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+        // Build evidence table if rows exist
+        let tableHtml = '';
+        if (data.table && data.table.length > 0) {
+            const cols = Object.keys(data.table[0]);
+            tableHtml = `
+                <div style="overflow-x:auto; margin-top:10px;">
+                    <table class="corp-table" style="font-size:11px; width:100%;">
+                        <thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+                        <tbody>${data.table.map(row =>
+                            `<tr>${cols.map(c => `<td>${escapeHtml(String(row[c] ?? ''))}</td>`).join('')}</tr>`
+                        ).join('')}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        thread.innerHTML += `
+            <div style="display:flex; justify-content:flex-start; margin-bottom:16px;">
+                <div style="background:var(--bg-card); border:1px solid var(--border); padding:12px 16px; border-radius:2px 12px 12px 12px; max-width:90%; font-size:13px; line-height:1.6;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                        <span style="font-size:10px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:0.5px;">HSE Ask AI</span>
+                        <span style="font-size:9px; color:var(--text-muted);">|</span>
+                        <span style="font-size:9px; color:var(--text-muted);">${data.intent || 'analysis'}</span>
+                    </div>
+                    <p style="margin:0 0 6px;">${formattedAnswer}</p>
+                    ${tableHtml}
+                    <p style="font-size:9px; color:var(--text-muted); margin:8px 0 0;">Source: ${data.source || 'oil_safety_reports.csv'}</p>
+                </div>
+            </div>`;
+        thread.scrollTop = thread.scrollHeight;
+
+    } catch (err) {
+        thread.innerHTML += `<div style="color:var(--red); font-size:12px; margin-bottom:10px;">HSE Ask AI is offline. Ensure the Python server is running.</div>`;
+    } finally {
+        btn.textContent = 'Ask AI';
+        btn.disabled = false;
+    }
+}
+
+function askAiPreset(question) {
+    const input = document.getElementById('askAiInput');
+    if (input) input.value = question;
+    sendAskAi();
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 
+// ============================================================
+// HSE REVIEW QUEUE — HUMAN-IN-THE-LOOP HITL VALIDATION
+// ============================================================
+async function fetchReviewQueue() {
+    const container = document.getElementById('reviewQueueContainer');
+    const countBadge = document.getElementById('reviewQueueCount');
+    if (!container) return;
+    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:32px;">Loading review queue from AI pipeline...</p>';
+
+    try {
+        const res = await fetch('/api/review-queue');
+        const data = await res.json();
+        const queue = data.queue || [];
+
+        if (countBadge) countBadge.textContent = `${queue.length} Pending Review`;
+
+        if (queue.length === 0) {
+            container.innerHTML = `<div class="info-card" style="text-align:center; padding:32px; color:var(--text-muted);">
+                <strong>No reports pending review.</strong><br>All AI classifications are above the 75% confidence threshold.
+            </div>`;
+            return;
+        }
+
+        container.innerHTML = queue.map(r => {
+            const confColor = r.ai_confidence < 55 ? 'var(--red)' : 'var(--amber)';
+            const verdictBg = r.ai_verdict === 'SIF_POTENTIAL' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.1)';
+            const verdictColor = r.ai_verdict === 'SIF_POTENTIAL' ? 'var(--red)' : 'var(--green, #10b981)';
+            return `
+            <div class="corp-card" style="margin-bottom:12px; border-left:3px solid ${confColor};" id="rq-card-${r.report_id}">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                    <div style="flex:1; min-width:200px;">
+                        <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+                            <span class="id-tag">${r.report_id}</span>
+                            <span style="font-size:10px; color:var(--text-muted);">${r.date}</span>
+                            <span style="font-size:10px; color:var(--text-muted);">${r.site}</span>
+                            <span style="font-size:10px; padding:2px 8px; border-radius:4px; background:${verdictBg}; color:${verdictColor}; font-weight:700;">${r.ai_verdict.replace(/_/g,' ')}</span>
+                        </div>
+                        <p style="font-size:12px; color:var(--text-primary); margin:0 0 6px; line-height:1.5;">${r.description}</p>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:var(--text-muted);">
+                            <span><strong>Dept:</strong> ${r.department}</span>
+                            <span><strong>IOGP Rule:</strong> ${r.iogp_rule}</span>
+                            <span><strong>Barrier:</strong> ${r.barrier}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right; min-width:140px;">
+                        <div style="font-size:24px; font-weight:800; color:${confColor}; line-height:1;">${r.ai_confidence}%</div>
+                        <div style="font-size:10px; color:var(--text-muted); margin-bottom:10px;">AI Confidence</div>
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <button class="btn btn-sm" style="background:var(--red); color:#fff; border:none; font-size:11px; padding:5px 10px;" onclick="reviewQueueAction('${r.report_id}', 'approve_sif')">Approve as SIF</button>
+                            <button class="btn btn-secondary btn-sm" style="font-size:11px; padding:5px 10px;" onclick="reviewQueueAction('${r.report_id}', 'reclassify_non_sif')">Reclassify Non-SIF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+    } catch (err) {
+        container.innerHTML = '<p style="color:var(--red); padding:20px;">Failed to load review queue. Server may be offline.</p>';
+        console.error('Review queue fetch failed:', err);
+    }
+}
+
+async function reviewQueueAction(reportId, action) {
+    const card = document.getElementById(`rq-card-${reportId}`);
+    if (card) card.style.opacity = '0.5';
+
+    const currentUser = sessionStorage.getItem('userRole') || 'HSE Officer';
+    try {
+        const res = await fetch('/api/review-queue/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ report_id: reportId, action, officer: currentUser })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, 'success');
+            if (card) card.remove();
+            // Refresh count
+            const countBadge = document.getElementById('reviewQueueCount');
+            const remaining = document.querySelectorAll('[id^="rq-card-"]').length;
+            if (countBadge) countBadge.textContent = `${remaining} Pending Review`;
+        } else {
+            showToast(data.error || 'Action failed.', 'error');
+            if (card) card.style.opacity = '1';
+        }
+    } catch (err) {
+        showToast('Server offline. Cannot process review action.', 'error');
+        if (card) card.style.opacity = '1';
+    }
+}
+
+// Auto-load review queue when its tab is activated
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.nav-item[data-tab="tab-review-queue"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTimeout(fetchReviewQueue, 100);
+        });
+    });
+});

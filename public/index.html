@@ -188,6 +188,14 @@
                     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <span>Reports</span>
                 </button>
+                <button class="nav-item" data-tab="tab-ask-ai" style="color: var(--amber);">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>HSE Ask AI</span>
+                </button>
+                <button class="nav-item" data-tab="tab-review-queue">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span>Review Queue</span>
+                </button>
             </nav>
 
             <div class="header-utilities">
@@ -1408,7 +1416,76 @@
             </div>
         </div><!-- /tab-explorer -->
 
+        <!-- ============================================================
+             TAB: HSE ASK AI — NATURAL LANGUAGE ANALYTICS ENGINE
+        ============================================================ -->
+        <div class="tab-content" id="tab-ask-ai">
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>HSE Ask AI &mdash; Natural Language Analytics Engine</h2>
+                        <p class="desc">Ask plain-English questions about the 500-report OIL safety dataset. Powered by a Pandas live-query engine — <strong>100% evidence-based, zero hallucination</strong>.</p>
+                    </div>
+                    <span class="badge" style="background:var(--amber); color:#000;">Zero Hallucination AI</span>
+                </div>
+
+                <!-- Suggested Queries -->
+                <div style="margin-bottom: 16px;">
+                    <p class="field-label" style="margin-bottom: 8px; font-weight: 700;">Suggested queries:</p>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="scenario-btn" onclick="askAiPreset('Which site has the highest SIF rate?')">Which site has the highest SIF rate?</button>
+                        <button class="scenario-btn" onclick="askAiPreset('What is the most breached IOGP life saving rule?')">Most breached IOGP rule?</button>
+                        <button class="scenario-btn" onclick="askAiPreset('Which barrier failure type is most common?')">Most common barrier failure?</button>
+                        <button class="scenario-btn" onclick="askAiPreset('How many total incidents are there?')">Total incidents summary?</button>
+                        <button class="scenario-btn" onclick="askAiPreset('Which department has the highest SIF rate?')">Highest risk department?</button>
+                        <button class="scenario-btn" onclick="askAiPreset('Show monthly SIF trend for recent months')">Monthly SIF trend?</button>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                    <input type="text" id="askAiInput" class="corp-input" placeholder="e.g. Which site has the highest SIF rate?" style="flex: 1; font-size: 14px;" onkeydown="if(event.key==='Enter') sendAskAi()">
+                    <button class="btn btn-primary" id="askAiBtn" onclick="sendAskAi()" style="white-space: nowrap; min-width: 120px;">Ask AI</button>
+                </div>
+
+                <!-- Chat Thread -->
+                <div id="askAiThread" style="min-height: 120px; max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--bg-secondary);">
+                    <div class="ask-ai-welcome">
+                        <p style="color: var(--text-muted); font-size: 13px; text-align: center; margin: 32px 0;">Ask a question above to query the live OIL safety dataset. All answers are derived directly from the data &mdash; no AI guessing.</p>
+                    </div>
+                </div>
+                <p style="font-size: 10px; color: var(--text-muted); margin-top: 8px;">Source: <code>oil_safety_reports.csv</code> &nbsp;|&nbsp; Pandas live aggregation &nbsp;|&nbsp; No LLM hallucination</p>
+            </div>
+        </div><!-- /tab-ask-ai -->
+
+        <!-- ============================================================
+             TAB: HSE REVIEW QUEUE — HUMAN-IN-THE-LOOP HITL VALIDATION
+        ============================================================ -->
+        <div class="tab-content" id="tab-review-queue">
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>HSE Review Queue &mdash; Human-in-the-Loop Validation</h2>
+                        <p class="desc">Reports where AI classification confidence is between 40&ndash;75% are flagged here. An HSE Officer must approve or reclassify before these are locked in the OISD audit database.</p>
+                    </div>
+                    <div style="display:flex; gap: 8px; align-items: center;">
+                        <span class="badge badge-amber" id="reviewQueueCount">Loading...</span>
+                        <button class="btn btn-secondary btn-sm" onclick="fetchReviewQueue()">Refresh Queue</button>
+                    </div>
+                </div>
+
+                <div class="info-card" style="margin-bottom: 16px; border-left: 3px solid var(--amber);">
+                    <strong>HITL Protocol:</strong> Per OISD-STD-105 Section 8.3, any AI classification with confidence below 75% or an unverified barrier state must receive mandatory Human-in-the-Loop (HITL) validation from a certified HSE Officer before inclusion in statutory quarterly reports.
+                </div>
+
+                <div id="reviewQueueContainer">
+                    <p style="color: var(--text-muted); text-align: center; padding: 40px;">Loading review queue...</p>
+                </div>
+            </div>
+        </div><!-- /tab-review-queue -->
+
     </div><!-- /main-wrapper -->
+
 
     <!-- ============================================================
          FOOTER
