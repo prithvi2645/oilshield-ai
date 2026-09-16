@@ -172,6 +172,10 @@
                     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     <span>Incident Classifier</span>
                 </button>
+                <button class="nav-item" data-tab="tab-review">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                    <span>HSE Review Queue</span>
+                </button>
                 <button class="nav-item" data-tab="tab-overview">
                     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                     <span>Dashboard</span>
@@ -191,6 +195,12 @@
             </nav>
 
             <div class="header-utilities">
+                <!-- HSE Ask AI Assistant Header Button -->
+                <button class="btn btn-primary btn-sm" id="hseAskModalBtn" onclick="openHseAskModal()" title="Ask HSE Analytics Assistant" style="background: var(--amber); color: #FFFFFF; font-weight: 700;">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>🤖 HSE Ask AI</span>
+                </button>
+
                 <!-- Theme Switcher (Light / Dark Mode) -->
                 <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
                     <svg class="svg-icon" id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -1267,7 +1277,41 @@
                 </form>
             </div>
 
+            <!-- ============================================================
+             TAB: HSE REVIEW QUEUE (HUMAN-IN-THE-LOOP)
+        ============================================================ -->
+        <div class="tab-content" id="tab-review">
             <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h2>Human-in-the-Loop &mdash; HSE Review Queue</h2>
+                        <p class="desc">Uncertain AI predictions (confidence score 40&ndash;60% or unconfirmed barrier status) are routed here for mandatory human validation by HSE Officers before final statutory audit locking.</p>
+                    </div>
+                    <span class="badge badge-amber" style="font-weight: 700;">Human-in-the-Loop Active</span>
+                </div>
+
+                <div class="table-container" style="margin-top: 16px;">
+                    <table class="corp-table">
+                        <thead>
+                            <tr>
+                                <th>Report ID</th>
+                                <th>Installation Site</th>
+                                <th>Department</th>
+                                <th>Observation Summary</th>
+                                <th>AI Risk Probability</th>
+                                <th>Flag Reason</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviewQueueBody">
+                            <!-- Populated dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- /tab-review -->
+
+        <div class="corp-card">
                 <div class="card-title filter-header">
                     <div>
                         <h2>Safety Reports Database</h2>
@@ -1488,6 +1532,50 @@
             <div class="confirm-modal-actions no-print" style="margin-top: 16px;">
                 <button type="button" class="btn btn-secondary" onclick="closeHseExecutiveSummaryModal()">Close</button>
                 <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Print / Save PDF Brief</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         HSE ASK AI MODAL (NATURAL LANGUAGE DATABASE ASSISTANT)
+    ============================================================ -->
+    <div class="role-modal-overlay" id="hseAskModalOverlay" style="display: none;">
+        <div class="role-modal" style="max-width: 680px; width: 90%;">
+            <div class="role-modal-header" style="text-align: left; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="oil-emblem" style="width: 36px; height: 36px; font-size: 14px;">OIL</div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 18px; color: var(--text-primary); font-family: var(--font-title);">HSE Ask AI &mdash; Database Analytics Assistant</h3>
+                            <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);">Natural language query engine evaluated against live Oil India dataset (Zero Hallucination)</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="closeHseAskModal()" style="font-size: 18px; padding: 2px 10px; cursor: pointer;">&times;</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <label class="field-label"><strong>Ask a question about OIL safety performance:</strong></label>
+                <div style="display: flex; gap: 8px; margin-top: 6px;">
+                    <input type="text" id="hseAskQueryInput" placeholder="e.g. Which site has highest SIF rate? Or What is top barrier failure in Drilling?" class="corp-input" style="flex: 1;">
+                    <button class="btn btn-primary" id="hseAskSubmitBtn" onclick="runHseAskQuery()">Ask AI</button>
+                </div>
+
+                <div class="presets-grid" style="margin-top: 14px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                    <button type="button" class="scenario-btn ask-preset-btn" onclick="setHseAskPreset('Which site has the highest SIF precursor rate?')">📍 Highest SIF Site</button>
+                    <button type="button" class="scenario-btn ask-preset-btn" onclick="setHseAskPreset('What is the top barrier failure in SIF incidents?')">🛡️ Top Barrier Failures</button>
+                    <button type="button" class="scenario-btn ask-preset-btn" onclick="setHseAskPreset('What are the most frequent Life-Saving Rule violations?')">⚠️ Most Breached LSR</button>
+                    <button type="button" class="scenario-btn ask-preset-btn" onclick="setHseAskPreset('How many total SIF precursors were logged in the system?')">📊 Total SIF Summary</button>
+                </div>
+
+                <div id="hseAskResultCard" style="display: none; margin-top: 18px; background: var(--bg-page); border: 1px solid var(--border); border-radius: 10px; padding: 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span class="badge badge-amber" id="hseAskProvBadge" style="font-weight: 700;">Live Pandas Execution</span>
+                        <span style="font-size: 11px; color: var(--text-muted);">100% Evidence-Based (Zero Hallucination)</span>
+                    </div>
+                    <div id="hseAskAnswerText" style="font-size: 14px; line-height: 1.6; color: var(--text-primary);"></div>
+                    <div id="hseAskTableHolder" style="margin-top: 14px; overflow-x: auto;"></div>
+                </div>
             </div>
         </div>
     </div>
