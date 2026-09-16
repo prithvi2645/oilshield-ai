@@ -459,55 +459,170 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         return result_report, analysis
 
     def get_hse_ask_answer(self, query):
-        q = str(query).lower()
+        q = str(query).strip().lower()
         csv_path = os.path.abspath("data/oil_safety_reports.csv")
         if not os.path.exists(csv_path):
             return {"answer": "Safety reports database not found.", "evidence_table": []}
 
-        df = pd.read_csv(csv_path)
+        try:
+            df = pd.read_csv(csv_path, dtype=str)
+        except Exception as e:
+            return {"answer": f"Error reading safety database: {e}", "evidence_table": []}
+
+        df['sif_potential_int'] = df['sif_potential'].apply(lambda x: 1 if str(x).strip() in ['1', 'true', 'True'] else 0)
+        df['score_float'] = df['sif_severity_score'].apply(lambda x: float(x) if str(x).replace('.', '', 1).isdigit() else 0.0)
+
         total = len(df)
-        sif_cnt = int(df['sif_potential'].sum()) if 'sif_potential' in df.columns else 0
+        sif_cnt = int(df['sif_potential_int'].sum())
         sif_pct = round((sif_cnt / total) * 100, 1) if total > 0 else 0.0
 
-        if 'site' in q or 'highest' in q or 'location' in q:
-            site_grp = df.groupby('site_location').agg(total=('report_id','count'), sif=('sif_potential','sum')).reset_index()
-            site_grp['sif_rate'] = ((site_grp['sif'] / site_grp['total']) * 100).round(1)
-            site_grp = site_grp.sort_values(by='sif_rate', ascending=False)
-            top_site = site_grp.iloc[0]['site_location']
-            top_rate = site_grp.iloc[0]['sif_rate']
-            
-            table = site_grp.head(5).to_dict(orient='records')
-            return {
-                "answer": f"Analysis of live Oil India database ({total} reports): <strong>{top_site}</strong> exhibits the highest SIF precursor density at <strong>{top_rate}% SIF Risk</strong>.",
-                "evidence_table": table
-            }
-        elif 'barrier' in q or 'failure' in q:
-            b_grp = df['barrier_failure_type'].value_counts().reset_index()
-            b_grp.columns = ['barrier_category', 'count']
-            b_grp['percentage'] = ((b_grp['count'] / total) * 100).round(1).astype(str) + "%"
-            top_b = b_grp.iloc[0]['barrier_category']
-            
-            return {
-                "answer": f"Primary safety barrier failure category across logged observations is <strong>{top_b}</strong>, accounting for {b_grp.iloc[0]['percentage']} of total hazards.",
-                "evidence_table": b_grp.head(5).to_dict(orient='records')
-            }
-        elif 'rule' in q or 'lsr' in q or 'violation' in q or 'iogp' in q:
-            r_grp = df['iogp_life_saving_rule'].value_counts().reset_index()
-            r_grp.columns = ['iogp_rule', 'count']
-            r_grp['pct'] = ((r_grp['count'] / total) * 100).round(1).astype(str) + "%"
-            top_r = r_grp.iloc[0]['iogp_rule']
+        # Department intent
+        depts = ['drilling', 'workover', 'pipeline', 'mechanical', 'civil', 'logistics', 'electrical', 'refinery', 'hse', 'fire']
+        matched_dept = [d for d in depts if d in q]
+
+        # Report type intent
+        types = ['unsafe act', 'unsafe condition', 'near miss', 'incident report']
+        matched_type = [t for t in types if t in q]
+
+        # Site intent
+        sites = ['baghjan', 'makum', 'digboi', 'jorhat', 'duliajan', 'moran', 'rajasthan', 'lpg', 'sekerkote']
+        matched_site = [s for s in sites if s in q]
+
+        # Specific keywords intent
+        keywords = ['pressure', 'leak', 'h2s', 'gas', 'fire', 'ladder', 'wrench', 'crane', 'valve', 'pipe', 'glove', 'flange', 'vehicle', 'truck', 'slop tank', 'splinter', 'sign', 'battery', 'cable', 'wire', 'hot work', 'confined space', 'driving', 'line of fire', 'working at height', 'lockout', 'tagout', 'lifting']
+        matched_keywords = [k for k in keywords if k in q]
+
+        if matched_dept:
+            dept_key = matched_dept[0]
+            sub_df = df[df['department'].str.lower().str.contains(dept_key, na=False)]
+            d_total = len(sub_df)
+            d_sif = int(sub_df['sif_potential_int'].sum())
+            d_rate = round((d_sif / d_total) * 100, 1) if d_total > 0 else 0.0
+            top_lsr = sub_df['iogp_life_saving_rule'].mode().iloc[0] if len(sub_df) > 0 else "None / Housekeeping"
+
+            table = sub_df[['report_id', 'site_location', 'report_type', 'report_title', 'sif_severity_score', 'iogp_life_saving_rule']].head(6).to_dict(orient='records')
+            dept_name = sub_df['department'].iloc[0] if len(sub_df) > 0 else dept_key.capitalize()
 
             return {
-                "answer": f"Most breached IOGP Life-Saving Rule across the portfolio is <strong>{top_r}</strong> with {r_grp.iloc[0]['count']} logged violations.",
-                "evidence_table": r_grp.head(5).to_dict(orient='records')
+                "answer": f"Analysis for <strong>{dept_name}</strong>: Found <strong>{d_total} logged safety observations</strong> including <strong>{d_sif} SIF Precursors ({d_rate}% SIF Rate)</strong>. Most frequent IOGP Rule breached: <strong>{top_lsr}</strong>.",
+                "evidence_table": table
             }
-        else:
+
+        elif matched_type:
+            type_key = matched_type[0]
+            sub_df = df[df['report_type'].str.lower().str.contains(type_key, na=False)]
+            t_total = len(sub_df)
+            t_sif = int(sub_df['sif_potential_int'].sum())
+            t_rate = round((t_sif / t_total) * 100, 1) if t_total > 0 else 0.0
+
+            table = sub_df[['report_id', 'site_location', 'department', 'report_title', 'sif_severity_score', 'barrier_failure_type']].head(6).to_dict(orient='records')
+
             return {
-                "answer": f"Live Oil India Safety System Overview: Total <strong>{total} observations</strong> processed, <strong>{sif_cnt} SIF Precursors ({sif_pct}% SIF Rate)</strong> identified across 12 monitoring installations.",
+                "answer": f"Portfolio breakdown for report type <strong>'{type_key.title()}'</strong>: <strong>{t_total} records</strong> ({round((t_total / total) * 100, 1)}% of dataset), containing <strong>{t_sif} high-severity SIF Precursors ({t_rate}% SIF Rate)</strong>.",
+                "evidence_table": table
+            }
+
+        elif 'sif' in q or 'high risk' in q or 'precursor' in q or 'critical' in q or 'severe' in q:
+            sub_df = df[df['sif_potential_int'] == 1].sort_values(by='score_float', ascending=False)
+            top_site = sub_df['site_location'].mode().iloc[0] if len(sub_df) > 0 else "N/A"
+            top_lsr = sub_df['iogp_life_saving_rule'].mode().iloc[0] if len(sub_df) > 0 else "N/A"
+
+            table = sub_df[['report_id', 'site_location', 'department', 'report_title', 'sif_severity_score', 'iogp_life_saving_rule', 'barrier_failure_type']].head(6).to_dict(orient='records')
+            return {
+                "answer": f"High-Risk SIF Precursor Assessment: Identified <strong>{sif_cnt} SIF Precursors out of {total} observations ({sif_pct}% SIF Rate)</strong>. Most vulnerable site: <strong>{top_site}</strong>. Primary breached rule: <strong>{top_lsr}</strong>.",
+                "evidence_table": table
+            }
+
+        elif matched_site or 'site' in q or 'location' in q or 'installation' in q:
+            if matched_site:
+                site_key = matched_site[0]
+                sub_df = df[df['site_location'].str.lower().str.contains(site_key, na=False)]
+                s_total = len(sub_df)
+                s_sif = int(sub_df['sif_potential_int'].sum())
+                s_rate = round((s_sif / s_total) * 100, 1) if s_total > 0 else 0.0
+                site_full = sub_df['site_location'].iloc[0] if len(sub_df) > 0 else site_key.title()
+
+                table = sub_df[['report_id', 'department', 'report_type', 'report_title', 'sif_severity_score', 'iogp_life_saving_rule']].head(6).to_dict(orient='records')
+                return {
+                    "answer": f"Installation Audit for <strong>{site_full}</strong>: Logged <strong>{s_total} observations</strong> with <strong>{s_sif} SIF Precursors ({s_rate}% SIF Rate)</strong>.",
+                    "evidence_table": table
+                }
+            else:
+                site_grp = df.groupby('site_location').agg(
+                    total_reports=('report_id', 'count'),
+                    sif_precursors=('sif_potential_int', 'sum')
+                ).reset_index()
+                site_grp['sif_rate_%'] = ((site_grp['sif_precursors'] / site_grp['total_reports']) * 100).round(1)
+                site_grp = site_grp.sort_values(by='sif_rate_%', ascending=False)
+                top_site = site_grp.iloc[0]['site_location']
+                top_rate = site_grp.iloc[0]['sif_rate_%']
+
+                return {
+                    "answer": f"Live Oil India Site Vulnerability Analysis across 12 installations: <strong>{top_site}</strong> has the highest SIF risk density at <strong>{top_rate}% SIF Rate</strong>.",
+                    "evidence_table": site_grp.head(6).to_dict(orient='records')
+                }
+
+        elif 'rule' in q or 'lsr' in q or 'violation' in q or 'iogp' in q:
+            r_grp = df.groupby('iogp_life_saving_rule').agg(
+                violations=('report_id', 'count'),
+                sif_precursors=('sif_potential_int', 'sum')
+            ).reset_index()
+            r_grp['portfolio_share_%'] = ((r_grp['violations'] / total) * 100).round(1)
+            r_grp = r_grp.sort_values(by='violations', ascending=False)
+            top_r = r_grp.iloc[0]['iogp_life_saving_rule']
+            top_cnt = r_grp.iloc[0]['violations']
+
+            return {
+                "answer": f"IOGP Life-Saving Rules Compliance: Most breached rule across Oil India operations is <strong>{top_r}</strong> with <strong>{top_cnt} logged violations ({r_grp.iloc[0]['portfolio_share_%']}% of total)</strong>.",
+                "evidence_table": r_grp.head(6).to_dict(orient='records')
+            }
+
+        elif 'barrier' in q or 'failure' in q or 'control' in q:
+            b_grp = df.groupby('barrier_failure_type').agg(
+                count=('report_id', 'count'),
+                sif_precursors=('sif_potential_int', 'sum')
+            ).reset_index()
+            b_grp['percentage_%'] = ((b_grp['count'] / total) * 100).round(1)
+            b_grp = b_grp.sort_values(by='count', ascending=False)
+            top_b = b_grp.iloc[0]['barrier_failure_type']
+
+            return {
+                "answer": f"Safety Control Barrier Analysis: Primary barrier failure category is <strong>{top_b}</strong>, accounting for <strong>{b_grp.iloc[0]['percentage_%']}% of total hazards</strong> across logged reports.",
+                "evidence_table": b_grp.head(6).to_dict(orient='records')
+            }
+
+        elif matched_keywords:
+            kw = matched_keywords[0]
+            mask = (
+                df['description'].str.lower().str.contains(kw, na=False) |
+                df['report_title'].str.lower().str.contains(kw, na=False) |
+                df['activity_being_performed'].str.lower().str.contains(kw, na=False) |
+                df['immediate_corrective_action'].str.lower().str.contains(kw, na=False)
+            )
+            sub_df = df[mask]
+            k_total = len(sub_df)
+            k_sif = int(sub_df['sif_potential_int'].sum()) if k_total > 0 else 0
+            k_rate = round((k_sif / k_total) * 100, 1) if k_total > 0 else 0.0
+
+            table = sub_df[['report_id', 'site_location', 'department', 'report_title', 'sif_severity_score', 'iogp_life_saving_rule']].head(6).to_dict(orient='records')
+
+            return {
+                "answer": f"Natural Language Keyword Search for <strong>'{kw.upper()}'</strong>: Found <strong>{k_total} matching incident reports</strong> in the database (including <strong>{k_sif} SIF Precursors, {k_rate}% SIF Rate</strong>).",
+                "evidence_table": table
+            }
+
+        else:
+            p_grp = df['precursor_pattern'].value_counts().reset_index()
+            p_grp.columns = ['precursor_pattern', 'count']
+            top_pattern = p_grp.iloc[0]['precursor_pattern']
+
+            return {
+                "answer": f"Oil India SIF Intelligence Summary: <strong>{total} total observations</strong> analyzed, <strong>{sif_cnt} SIF Precursors ({sif_pct}% SIF Rate)</strong> across 12 installations. Top recurring hazard pattern: <strong>{top_pattern}</strong>.",
                 "evidence_table": [
-                    {"metric": "Total Observations", "value": total},
-                    {"metric": "SIF Precursors Identified", "value": sif_cnt},
-                    {"metric": "Portfolio SIF Rate (%)", "value": sif_pct}
+                    {"metric": "Total Safety Observations", "value": total},
+                    {"metric": "Identified SIF Precursors", "value": sif_cnt},
+                    {"metric": "Portfolio SIF Risk Rate", "value": f"{sif_pct}%"},
+                    {"metric": "Top Recurring Hazard Pattern", "value": top_pattern}
                 ]
             }
 
