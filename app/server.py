@@ -856,29 +856,70 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
 
         nodes = {}
         links_dict = {}
+        node_incidents = {}
 
-        def add_node(node_id, name, group_type, is_sif, severity, report_id, report_title, site):
+        def map_site(s):
+            s = str(s)
+            if 'Duliajan' in s: return ('site_duliajan', 'Duliajan Operations Base', 'Site Location', 0)
+            if 'Baghjan' in s or 'Jorhat' in s: return ('site_baghjan_jorhat', 'Baghjan & Jorhat Stations', 'Site Location', 0)
+            if 'Moran' in s or 'Makum' in s: return ('site_moran_makum', 'Moran & Makum Oil Field', 'Site Location', 0)
+            if 'Digboi' in s or 'Refinery' in s: return ('site_digboi', 'Digboi Refinery Area', 'Site Location', 0)
+            return ('site_kg_rigs', 'KG Offshore & Drilling Rigs', 'Site Location', 0)
+
+        def map_dept(d):
+            d = str(d)
+            if 'Drilling' in d or 'Workover' in d: return ('dept_drilling', 'Drilling & Workover', 'Department', 1)
+            if 'Production' in d: return ('dept_production', 'Production Oil & Gas', 'Department', 1)
+            if 'Maintenance' in d or 'Mechanical' in d: return ('dept_maintenance', 'Mechanical Maintenance', 'Department', 1)
+            if 'Pipeline' in d or 'Civil' in d or 'Logistics' in d: return ('dept_pipeline', 'Pipeline & Logistics', 'Department', 1)
+            return ('dept_hse', 'HSE & Electrical Safety', 'Department', 1)
+
+        def map_lsr(l):
+            l = str(l)
+            if 'Height' in l: return ('lsr_height', 'Working at Height', 'Life-Saving Rule', 2)
+            if 'Fire' in l or 'Line' in l: return ('lsr_fire', 'Line of Fire', 'Life-Saving Rule', 2)
+            if 'Energy' in l or 'Isolation' in l or 'Bypassing' in l: return ('lsr_energy', 'Energy Isolation', 'Life-Saving Rule', 2)
+            if 'Hot Work' in l or 'System' in l: return ('lsr_hotwork', 'Hot Work & Gas Safety', 'Life-Saving Rule', 2)
+            return ('lsr_confined', 'Confined Space & Driving', 'Life-Saving Rule', 2)
+
+        def map_barrier(b):
+            b = str(b)
+            if 'Equipment' in b or 'Integrity' in b: return ('barrier_equip', 'Equipment Integrity Failure', 'Barrier Category', 3)
+            if 'Procedural' in b or 'Administrative' in b: return ('barrier_proc', 'Procedural / Administrative Defect', 'Barrier Category', 3)
+            if 'Physical' in b or 'Engineering' in b: return ('barrier_phys', 'Physical / Engineering Defect', 'Barrier Category', 3)
+            if 'Supervisory' in b or 'Management' in b: return ('barrier_super', 'Supervisory Control Defect', 'Barrier Category', 3)
+            return ('barrier_ppe', 'PPE / Individual Defect', 'Barrier Category', 3)
+
+        def map_pattern(p):
+            p = str(p)
+            if 'Collapse' in p or 'Drop' in p or 'Crane' in p or 'Tubular' in p: return ('pat_collapse', 'Collapse of Heavy Work / Dropped Load', 'Precursor Pattern', 4)
+            if 'Pressure' in p or 'Hose' in p or 'Chiksan' in p or 'Spray' in p: return ('pat_pressure', 'High Pressure Surges & Hose Whip', 'Precursor Pattern', 4)
+            if 'Gas' in p or 'H2S' in p or 'Hydrocarbon' in p or 'Vapor' in p or 'Fire' in p: return ('pat_gas', 'Ignitable Hydrocarbon Vapor & Gas', 'Precursor Pattern', 4)
+            if 'Fall' in p or 'Height' in p or 'Ladder' in p or 'Scaffold' in p: return ('pat_fall', 'Unanchored Fall Hazard from Height', 'Precursor Pattern', 4)
+            return ('pat_loto', 'LOTO Interlock Bypass & Energy', 'Precursor Pattern', 4)
+
+        def add_node(n_tuple, is_sif, desc):
+            node_id, name, group_type, layer = n_tuple
             if node_id not in nodes:
                 nodes[node_id] = {
                     "id": node_id,
                     "name": name,
                     "group": group_type,
+                    "layer": layer,
+                    "incident_count": 0,
+                    "sif_count": 0,
+                    "sif_rate": 0.0,
                     "value": 1,
-                    "sif_count": 1 if is_sif else 0,
-                    "severity_scores": [float(severity)] if pd.notnull(severity) else [],
-                    "sites": {site: 1} if pd.notnull(site) else {},
-                    "reports": [{"id": str(report_id), "title": str(report_title), "sif": int(is_sif)}] if pd.notnull(report_id) else []
+                    "sample_incidents": []
                 }
-            else:
-                nodes[node_id]["value"] += 1
-                if is_sif:
-                    nodes[node_id]["sif_count"] += 1
-                if pd.notnull(severity):
-                    nodes[node_id]["severity_scores"].append(float(severity))
-                if pd.notnull(site):
-                    nodes[node_id]["sites"][site] = nodes[node_id]["sites"].get(site, 0) + 1
-                if pd.notnull(report_id) and len(nodes[node_id]["reports"]) < 6:
-                    nodes[node_id]["reports"].append({"id": str(report_id), "title": str(report_title), "sif": int(is_sif)})
+                node_incidents[node_id] = []
+
+            nodes[node_id]["incident_count"] += 1
+            if is_sif:
+                nodes[node_id]["sif_count"] += 1
+
+            if len(node_incidents[node_id]) < 3 and desc and str(desc) != "nan":
+                node_incidents[node_id].append(str(desc))
 
         def add_link(source_id, target_id):
             key = f"{source_id}___{target_id}"
@@ -888,44 +929,52 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 links_dict[key]["value"] += 1
 
         for _, row in df.iterrows():
-            dept = str(row.get("department", "Operations"))
-            lsr = str(row.get("iogp_life_saving_rule", "General Safety"))
-            barrier = str(row.get("barrier_failure_type", "Operational Control"))
-            pattern = str(row.get("precursor_pattern", "General Incident")) if pd.notnull(row.get("precursor_pattern")) else "General Hazard"
+            is_sif = bool(row.get("sif_potential", 0) == 1)
+            desc = str(row.get("description", ""))
 
-            is_sif = int(row.get("sif_potential", 0)) == 1
-            severity = row.get("sif_severity_score", 0.0)
-            report_id = row.get("report_id", "")
-            report_title = row.get("report_title", "")
-            site = str(row.get("site_location", ""))
+            site_tuple = map_site(row.get("site_location", ""))
+            dept_tuple = map_dept(row.get("department", ""))
+            lsr_tuple = map_lsr(row.get("iogp_life_saving_rule", ""))
+            barrier_tuple = map_barrier(row.get("barrier_failure_type", ""))
+            pattern_tuple = map_pattern(row.get("precursor_pattern", ""))
 
-            dept_id = f"dept_{dept}"
-            lsr_id = f"lsr_{lsr}"
-            barrier_id = f"barrier_{barrier}"
-            pattern_id = f"pattern_{pattern}"
+            add_node(site_tuple, is_sif, desc)
+            add_node(dept_tuple, is_sif, desc)
+            add_node(lsr_tuple, is_sif, desc)
+            add_node(barrier_tuple, is_sif, desc)
+            add_node(pattern_tuple, is_sif, desc)
 
-            add_node(dept_id, dept, "Department", is_sif, severity, report_id, report_title, site)
-            add_node(lsr_id, lsr, "Life-Saving Rule", is_sif, severity, report_id, report_title, site)
-            add_node(barrier_id, barrier, "Barrier Category", is_sif, severity, report_id, report_title, site)
-            add_node(pattern_id, pattern, "Precursor Pattern", is_sif, severity, report_id, report_title, site)
+            add_link(site_tuple[0], dept_tuple[0])
+            add_link(dept_tuple[0], lsr_tuple[0])
+            add_link(lsr_tuple[0], barrier_tuple[0])
+            add_link(barrier_tuple[0], pattern_tuple[0])
 
-            add_link(dept_id, lsr_id)
-            add_link(lsr_id, barrier_id)
-            add_link(barrier_id, pattern_id)
+        # Finalize stats
+        for n_id, node in nodes.items():
+            cnt = node["incident_count"]
+            sif = node["sif_count"]
+            rate = round((sif / cnt) * 100, 1) if cnt > 0 else 0.0
+            node["sif_rate"] = rate
+            node["value"] = cnt
+            node["is_high_risk"] = rate >= 25.0 or sif >= 15
+            node["sif_status"] = "HIGH SIF RISK" if node["is_high_risk"] else "LOW SIF RISK"
+            node["sif_potential_label"] = f"{rate}% SIF Risk" if rate > 0 else "0% SIF Risk"
+            node["sample_incidents"] = node_incidents.get(n_id, [])
 
-        # Format final nodes output
-        final_nodes = []
-        for n in nodes.values():
-            scores = n.pop("severity_scores", [])
-            avg_sev = float(np.mean(scores)) if len(scores) > 0 else 0.0
-            sites_map = n.pop("sites", {})
-            top_site = max(sites_map.items(), key=lambda x: x[1])[0] if sites_map else "N/A"
-            n["avg_severity"] = round(avg_sev * 100, 1) # scale to 0-100%
-            n["top_site"] = top_site
-            final_nodes.append(n)
+            # Assign OISD standards mapping per node
+            if "Height" in node["name"] or "Fall" in node["name"]:
+                node["oisd_standard"] = "OISD-STD-105 (Work at Height)"
+            elif "Pressure" in node["name"] or "Hose" in node["name"]:
+                node["oisd_standard"] = "OISD-STD-118 (Pressure Piping)"
+            elif "Electrical" in node["name"] or "LOTO" in node["name"]:
+                node["oisd_standard"] = "OISD-STD-137 (Electrical Inspection)"
+            elif "Gas" in node["name"] or "Hydrocarbon" in node["name"] or "Hot Work" in node["name"]:
+                node["oisd_standard"] = "OISD-STD-155 (Hazardous Gas)"
+            else:
+                node["oisd_standard"] = "OISD-STD-105 (General Safety)"
 
         return {
-            "nodes": final_nodes,
+            "nodes": list(nodes.values()),
             "links": list(links_dict.values())
         }
 
