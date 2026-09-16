@@ -1668,6 +1668,39 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.0.2"></script>
+    <!-- ═══ CRITICAL BOOTSTRAP (inline — cannot be cached) ═══
+         Defines getRoleDisplayName and ensures tab activation
+         after login. This MUST run before app.js. -->
+    <script>
+    // Patch: getRoleDisplayName (was missing from old cached app.js builds)
+    window.getRoleDisplayName = function(role) {
+        return {
+            'hse_manager':  'HSE Manager (Corporate)',
+            'site_manager': 'Site Manager',
+            'supervisor':   'Field Supervisor',
+            'analyst':      'Safety Analyst'
+        }[role] || 'HSE Officer';
+    };
+
+    // Patch: safe classifyIncident reference
+    window.classifyIncident = window.classifyIncident || function() {
+        if (typeof window.runClassification === 'function') window.runClassification();
+    };
+
+    // After DOMContentLoaded: if a tab-content has 'active' already set by
+    // sessionStorage restore, its parent must be visible.
+    // If NONE are active after 500ms, force tab-home active.
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            var anyActive = document.querySelector('.tab-content.active');
+            if (!anyActive) {
+                var homeTab = document.getElementById('tab-home');
+                if (homeTab) homeTab.classList.add('active');
+            }
+        }, 600);
+    });
+    </script>
+
+    <script src="app.js?v=3.0.3"></script>
 </body>
 </html>
