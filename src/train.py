@@ -9,8 +9,10 @@ from sklearn.metrics import classification_report, recall_score, f1_score, preci
 
 try:
     from src.domain_tokenizer import UpstreamDomainTokenizer
+    from src.validate_data import validate_dataset
 except ModuleNotFoundError:
     from domain_tokenizer import UpstreamDomainTokenizer
+    from validate_data import validate_dataset
 
 domain_tokenizer = UpstreamDomainTokenizer()
 
@@ -24,6 +26,13 @@ def train_sif_models(data_path="data/oil_safety_reports.csv"):
     
     if not os.path.exists(data_path):
         print(f"[ERROR] Training dataset {data_path} not found.")
+        return False
+
+    validation = validate_dataset(data_path)
+    if not validation["valid"]:
+        print("[ERROR] Dataset validation failed:")
+        for error in validation["errors"]:
+            print(f"  - {error}")
         return False
 
     # 1. Load Dataset

@@ -9,7 +9,7 @@
 
 In upstream oil and gas operations—spanning drilling rigs, gas gathering stations, refineries, and high-pressure cross-country pipelines—traditional safety tracking often struggles to separate high-consequence **Serious Injury & Fatality (SIF)** precursors from routine low-severity observations.
 
-This platform provides an end-to-end artificial intelligence and data-driven triage solution developed for **Oil India Limited (HSSE Department)**. Built with a zero-external-framework Python server and offline-first ML models, it automatically ingests field safety reports (in English, Hindi, Hinglish, or Assamese regional terms), evaluates energy pathway hazards, checks safety barrier health, flags IOGP Life-Saving Rule violations, builds interactive safety knowledge graphs, and forecasts temporal risk trends across 12+ Oil India operational installations.
+This platform provides an end-to-end artificial intelligence and data-driven triage solution developed for **Oil India Limited (HSSE Department)**. Built with a zero-external-framework Python server and local ML models, it automatically ingests field safety reports (in English, Hindi, Hinglish, or Assamese regional terms), evaluates energy pathway hazards, checks safety barrier health, flags IOGP Life-Saving Rule violations, builds interactive safety knowledge graphs, and forecasts temporal risk trends across 12+ Oil India operational installations. The dashboard currently loads Chart.js, D3.js, and fonts from external CDNs unless those assets are bundled locally.
 
 ---
 
@@ -20,9 +20,9 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 | Dataset File | Sample Count | Class Breakdown | Role in Pipeline | Description / Coverage |
 |---|---|---|---|---|
 | `data/oil_safety_reports.csv` | **500 records** | 384 Non-SIF (76.8%), 116 SIF (23.2%) | **Production Training Set** | Primary domain dataset used to train active production models (`models/*.pkl`) across 12 Oil India installations (Baghjan, Duliajan, Digboi, Moran). |
-| `data/osha_oil_sif_train.csv` | **800 records** | 640 Non-SIF (80.0%), 160 SIF (20.0%) | **OSHA Benchmark Train Split** | Processed upstream oilfield severe injury dataset used for external cross-domain benchmark training. |
-| `data/osha_oil_sif_test.csv` | **200 records** | 160 Non-SIF (80.0%), 40 SIF (20.0%) | **OSHA Held-Out Test Set** | Unseen independent test set used to verify cross-domain generalization on real-world US OSHA incident narratives. |
-| `data/severe_injury_reports.csv` | **1,500 records** | Varied severe injuries (amputations, H2S gas, burns) | **Raw OSHA Baseline Corpus** | Raw ingestion corpus filtered by NAICS oil & gas codes (`211111`, `213111`, `213112`, `486110`). |
+| `data/osha_oil_sif_train.csv` | **480 records** | Dataset-specific labels | **OSHA Benchmark Train Split** | Processed upstream oilfield severe injury dataset for cross-domain experimentation. |
+| `data/osha_oil_sif_test.csv` | **120 records** | Dataset-specific labels | **OSHA Held-Out Test Set** | Held-out OSHA-style records for benchmark experimentation; not a substitute for an independent OIL validation set. |
+| `data/severe_injury_reports.csv` | **600 records** | Varied severe injuries | **Raw OSHA Baseline Corpus** | Raw ingestion corpus filtered by NAICS oil & gas codes. |
 
 ---
 
@@ -39,8 +39,8 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
    - **Objective**: Predicts which of the 10 IOGP Life-Saving Rules is implicated (e.g., *Bypassing Safety Controls, Energy Isolation, Confined Space, Hot Work*).
 
 3. **Temporal Risk Extrapolation Engine (`Polyfit Regression`)**:
-   - **Algorithm**: 2nd-Degree Polynomial Curve Fitting ($y = a x^2 + b x + c$).
-   - **Objective**: Computes 30-day and 60-day forward-looking SIF precursor rate projections based on historical observation trends.
+  - **Algorithm**: 1st-degree linear curve fitting with NumPy polyfit.
+  - **Objective**: Computes two forward-looking monthly SIF precursor projections based on historical observation trends.
 
 ---
 
@@ -61,11 +61,13 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 
 ### 4. Verification & Benchmarking Evaluation (5-Fold Stratified CV & OSHA Test Set)
 
+The benchmark scripts use fold-local TF-IDF preprocessing to avoid vocabulary leakage. The current dataset is synthetic or highly structured for prototyping, so perfect scores should be treated as a baseline signal rather than evidence of production generalization. Before operational deployment, evaluate against an independently labeled OIL validation set and report confusion matrices, calibration, false-negative rates, and human-review agreement.
+
 | Evaluation Benchmark | Dataset | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | ROC-AUC (%) |
 |---|---|---|---|---|---|---|
 | **Production SIF Classifier (Logistic Regression)** | `data/oil_safety_reports.csv` | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
 | **Production LSR Classifier (Random Forest)** | `data/oil_safety_reports.csv` | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
-| **OSHA Generalization Benchmark Test** | `data/osha_oil_sif_test.csv` (Held-out) | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
+| **OSHA-Style Benchmark Test** | `data/osha_oil_sif_test.csv` (Held-out) | See current benchmark run | See current benchmark run | See current benchmark run | See current benchmark run | See current benchmark run |
 | Support Vector Machine (SVC Linear, C=1.0) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
 | Multinomial Naive Bayes (alpha=0.5) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
 | Gradient Boosting (n=100, lr=0.1) | Benchmark Candidate | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% |
@@ -74,7 +76,7 @@ This platform provides an end-to-end artificial intelligence and data-driven tri
 
 ## Role-Based Access Control (RBAC): The 4 User View Types
 
-The platform implements a Role-Based Access Control (RBAC) architecture with **4 specialized User View Types**, tailored for different operational personas across Oil India installations:
+The dashboard provides **4 client-side role views** tailored for different operational personas across Oil India installations. These views currently scope navigation and controls in the browser; server-side authentication and authorization are still required before production deployment.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -90,6 +92,7 @@ The platform implements a Role-Based Access Control (RBAC) architecture with **4
 - **Key Capabilities**:
   - Full system administration access.
   - One-click UTF-8 BOM CSV data export (`/api/export`) for corporate reporting.
+  - Human-review decisions and audit-event visibility for governance workflows.
   - Model retraining execution (`src/train.py`) and threshold override authority.
   - Strategic oversight of corporate SIF precursor reduction targets (20–25% target window).
 
@@ -115,7 +118,7 @@ The platform implements a Role-Based Access Control (RBAC) architecture with **4
   - Read-only analytics dashboard access.
   - Deep exploration of the Safety Relationship Map (D3.js Knowledge Graph).
   - Inspecting node connections (Activity -> Hazard -> Barrier -> LSR Rule -> Consequence).
-  - Analyzing monthly trend distributions, polyfit regression curves, and severity donut ratios.
+  - Analyzing monthly trend distributions, linear regression curves, and severity donut ratios.
 
 ---
 
@@ -159,6 +162,17 @@ The platform implements a Role-Based Access Control (RBAC) architecture with **4
 ### 8. UTF-8 Excel-Compatible Data Export
 - One-click CSV export endpoint `/api/export` with embedded UTF-8 Byte Order Mark (`\xef\xbb\xbf`), allowing Microsoft Excel on Windows to natively open exported safety reports with proper column formatting.
 
+### 9. Human-in-the-Loop Governance
+- Reviewers can accept, reject, or correct AI assessments through `/api/reviews`.
+- Audit events record action metadata without storing raw report text.
+- `/api/health` reports dataset and model artifact readiness.
+
+### 10. Decision-Support Intelligence
+- `/api/simulate` provides a rule-based what-if barrier scenario.
+- `/api/report-quality` identifies missing report context and asks clarification questions.
+- `/api/copilot` answers grounded questions from current analytics.
+- `/api/brief` generates a grounded HSE safety brief for human validation.
+
 ---
 
 ## REST API Endpoints (`app/server.py`)
@@ -168,10 +182,17 @@ The platform implements a Role-Based Access Control (RBAC) architecture with **4
 | `/` | `GET` | Serves main Single-Page Application (`public/index.html`) |
 | `/api/classify` | `POST` | Ingests incident text, runs ML inference, returns SIF risk, IOGP rule, rationale & hierarchy of controls |
 | `/api/similar` | `POST` | Ingests incident text, performs TF-IDF cosine similarity search, returns top 3 historical near-misses |
-| `/api/analytics` | `GET` | Returns summary KPIs, hazard distributions, monthly trend arrays, and polyfit 60-day risk forecasts |
+| `/api/analytics` | `GET` | Returns summary KPIs, recurrence alerts, cross-dimensional risk matrix, distributions, monthly trends, and linear forecasts |
 | `/api/knowledge-graph` | `GET` | Returns extracted graph nodes (Activities, Hazards, Barriers, Rules, Consequences) and link edges |
 | `/api/reports` | `GET` | Serves safety report records from `data/oil_safety_reports.csv` |
 | `/api/export` | `GET` | Serves UTF-8 BOM encoded CSV download for Microsoft Excel compatibility |
+| `/api/reviews` | `GET`, `POST` | Reads or stores human review decisions |
+| `/api/audit-events` | `GET` | Reads bounded action metadata for governance auditing |
+| `/api/simulate` | `POST` | Runs a deterministic what-if safety scenario |
+| `/api/report-quality` | `POST` | Returns missing context and clarification questions |
+| `/api/copilot` | `POST` | Answers grounded HSE analytics questions |
+| `/api/brief` | `GET` | Generates a grounded HSE safety intelligence brief |
+| `/api/health` | `GET` | Reports runtime, dataset, and model artifact readiness |
 
 ---
 
@@ -193,10 +214,10 @@ sih-hsse-platform/
 │   └── server.py                  # HTTP server & REST API handlers (native http.server)
 ├── data/
 │   ├── oil_safety_reports.csv     # Primary dataset of 500+ Oil India safety observations
-│   ├── osha_oil_sif_train.csv     # SIF precursor ML training set (800 OSHA records)
-│   ├── osha_oil_sif_test.csv      # SIF precursor ML testing set (200 OSHA records)
+│   ├── osha_oil_sif_train.csv     # OSHA-style benchmark training set (480 records)
+│   ├── osha_oil_sif_test.csv      # OSHA-style held-out benchmark set (120 records)
 │   ├── osha_oil_sif_processor.py  # OSHA & oilfield data ingestion processor
-│   └── severe_injury_reports.csv  # Severe injury baseline dataset (1,500 records)
+│   └── severe_injury_reports.csv  # Severe injury baseline dataset (600 records)
 ├── models/
 │   ├── sif_classifier.pkl         # Trained Binary SIF Precursor Classification Model
 │   ├── lsr_classifier.pkl         # Trained Multi-class IOGP Life-Saving Rule Model
@@ -238,7 +259,7 @@ cd sih-hsse-platform
 
 ### 3. Install Python ML Dependencies
 ```bash
-python -m pip install scikit-learn numpy pandas joblib
+python -m pip install -r requirements.txt
 ```
 
 ### 4. Launch the Server
@@ -269,6 +290,21 @@ python src/hyperparameter_tuning.py
 
 # 3. Evaluate model performance & generate metrics
 python src/evaluate_experiments.py
+
+# 4. Validate the production dataset before training or evaluation
+python src/validate_data.py data/oil_safety_reports.csv
+```
+
+## Continuous Integration
+
+GitHub Actions validates pushes and pull requests with Python 3.11 and 3.12. The workflow installs `requirements.txt`, compiles Python sources, runs the regression suite, and checks `public/app.js` with Node.js.
+
+To run the same checks locally:
+
+```bash
+python -m py_compile app/server.py src/*.py
+python -m unittest discover -s tests -v
+node --check public/app.js
 ```
 
 ---

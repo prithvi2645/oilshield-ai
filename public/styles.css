@@ -1448,6 +1448,90 @@ textarea:focus, .corp-input:focus {
     gap: var(--space-md);
 }
 
+.decision-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.copilot-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.copilot-input-row .corp-input {
+    flex: 1;
+}
+
+.copilot-answer {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-left: 3px solid var(--amber);
+    background: var(--bg-page);
+}
+
+.copilot-answer strong,
+.copilot-answer small,
+.copilot-answer div {
+    display: block;
+}
+
+.copilot-answer div {
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.copilot-answer small {
+    margin-top: 8px;
+    color: var(--text-muted);
+}
+
+.decision-result {
+    margin-top: 2px;
+}
+
+.decision-result p {
+    margin: 8px 0 0;
+}
+
+.decision-result small {
+    display: block;
+    margin-top: 10px;
+    color: var(--text-muted);
+}
+
+.review-panel {
+    border-color: var(--blue-border, var(--border));
+    background: var(--blue-bg, var(--bg-card));
+}
+
+.review-help {
+    color: var(--text-muted);
+    margin: 8px 0 12px;
+    font-size: 12px;
+}
+
+.review-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.review-panel textarea {
+    margin-bottom: 10px;
+}
+
+.review-status {
+    min-height: 18px;
+    color: var(--green, #15803D);
+    font-size: 12px;
+    font-weight: 600;
+}
+
 .verdict-banner {
     display: flex;
     justify-content: space-between;

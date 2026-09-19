@@ -1,5 +1,6 @@
 import os
 import pickle
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -25,9 +26,10 @@ class SafetyClassifierPipeline:
         self.load_or_train()
 
     def load_or_train(self):
-        vec_path = os.path.join("models", "tfidf_vectorizer.pkl")
-        sif_path = os.path.join("models", "sif_classifier.pkl")
-        lsr_path = os.path.join("models", "lsr_classifier.pkl")
+        base_dir = Path(__file__).resolve().parents[1]
+        vec_path = base_dir / "models" / "tfidf_vectorizer.pkl"
+        sif_path = base_dir / "models" / "sif_classifier.pkl"
+        lsr_path = base_dir / "models" / "lsr_classifier.pkl"
 
         if os.path.exists(vec_path) and os.path.exists(sif_path):
             try:
@@ -47,7 +49,10 @@ class SafetyClassifierPipeline:
         return self.train()
 
     def train(self, data_path="data/oil_safety_reports.csv"):
-        if not os.path.exists(data_path):
+        data_path = Path(data_path)
+        if not data_path.is_absolute():
+            data_path = Path(__file__).resolve().parents[1] / data_path
+        if not data_path.exists():
             print(f"[WARN] Data file {data_path} not found. Operating on DEKRA rule engine fallback.")
             return False
 
@@ -144,8 +149,24 @@ class SafetyClassifierPipeline:
         else:
             primary_rule, lsr_conf = self.lsr_matcher.classify_iogp_rule(normalized_text)
 
+        lsr_model_rule = "UNAVAILABLE"
+        lsr_model_confidence = 0.0
+        if self.is_trained and self.vectorizer and self.lsr_model:
+            lsr_vector = self.vectorizer.transform([normalized_text])
+            lsr_model_rule = str(self.lsr_model.predict(lsr_vector)[0])
+            if hasattr(self.lsr_model, "predict_proba"):
+                lsr_model_confidence = float(self.lsr_model.predict_proba(lsr_vector)[0].max())
+
         # 5. Generate OISD Barrier Action Plan & Hierarchy of Controls
         action_plan, corrective_actions = self._generate_oisd_action_plan(primary_rule, dekra_result["barrier_condition"], final_is_sif)
+        explainability = self._build_explainability(
+            text,
+            dekra_result,
+            primary_rule,
+            severity_score,
+            ml_prob,
+            final_is_sif,
+        )
 
         return {
             "text": text,
@@ -162,9 +183,69 @@ class SafetyClassifierPipeline:
             "has_zero_energy_verification": dekra_result.get("has_zero_energy_verification", False),
             "iogp_life_saving_rule": primary_rule,
             "lsr_confidence": round(lsr_conf, 2),
+            "lsr_model_rule": lsr_model_rule,
+            "lsr_model_confidence": round(lsr_model_confidence, 2),
+            "lsr_model_agreement": lsr_model_rule == primary_rule if lsr_model_rule != "UNAVAILABLE" else None,
             "audit_rationale": dekra_result["audit_rationale"],
             "oisd_action_plan": action_plan,
-            "corrective_actions": corrective_actions
+            "corrective_actions": corrective_actions,
+            **explainability,
+        }
+
+    def _build_explainability(self, text, dekra_result, primary_rule, severity_score, ml_prob, is_sif):
+        energy_sources = dekra_result.get("detected_energy_sources", [])
+        barrier_condition = dekra_result.get("barrier_condition", "UNKNOWN_OR_NOT_MENTIONED")
+        normalized_text = dekra_result.get("normalized_text", text)
+        lower_text = normalized_text.lower()
+
+        evidence = []
+        evidence_patterns = [
+            ("High-energy source", energy_sources),
+            ("Barrier failure language", barrier_condition == "FAILED_OR_ABSENT"),
+            ("Zero-energy verification", dekra_result.get("has_zero_energy_verification", False)),
+        ]
+        for label, matched in evidence_patterns:
+            if matched:
+                evidence.append({"factor": label, "matched": True})
+
+        trigger_terms = [
+            "without", "missing", "failed", "unsecured", "unisolated", "bypassed",
+            "no gas testing", "no attendant", "without lanyard", "without loto",
+        ]
+        matched_triggers = [term for term in trigger_terms if term in lower_text]
+        consequences = {
+            "Confined Space": "Toxic exposure, oxygen deficiency, or asphyxiation",
+            "Energy Isolation": "Unexpected electrical, mechanical, or stored-energy release",
+            "Line of Fire": "Struck-by, caught-between, hose-whip, or pressure-release injury",
+            "Hot Work": "Fire, explosion, or toxic combustion exposure",
+            "Work at Height": "Fall from elevation or dropped-object injury",
+            "Safe Mechanical Lifting": "Crush injury or suspended-load strike",
+        }
+        if is_sif:
+            consequence = consequences.get(primary_rule, "Serious injury or fatality from uncontrolled hazard exposure")
+        else:
+            consequence = "No immediate fatal-potential consequence identified"
+
+        if severity_score >= 0.80:
+            confidence_band = "HIGH"
+        elif severity_score >= 0.55:
+            confidence_band = "MEDIUM"
+        else:
+            confidence_band = "LOW"
+
+        risk_factors = [
+            {"name": "ML SIF probability", "value": round(ml_prob, 3)},
+            {"name": "Energy pathway", "value": "present" if energy_sources else "not detected"},
+            {"name": "Barrier state", "value": barrier_condition},
+            {"name": "Life-Saving Rule", "value": primary_rule},
+        ]
+        return {
+            "confidence_band": confidence_band,
+            "evidence_items": evidence,
+            "trigger_terms": matched_triggers,
+            "potential_consequence": consequence,
+            "risk_factors": risk_factors,
+            "human_review_required": confidence_band == "LOW" or (0.40 <= severity_score <= 0.65),
         }
 
     def _generate_oisd_action_plan(self, rule: str, barrier_state: str, is_sif: bool):
