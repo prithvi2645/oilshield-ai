@@ -171,7 +171,12 @@ def analyze_incident(text: str) -> Dict[str, Any]:
         priority = "LOW"
         explanation = "Absence of fatal-energy mechanisms or standard low-severity operational observation."
 
-    primary_rule = list(matched_rules)[0] if matched_rules else "General Safety"
+    if re.search(r"\b(?:loto|lockout[\s-]*tagout|lock\s*out\s*/?\s*tag\s*out)\b", text_lower):
+        primary_rule = "Energy Isolation"
+    elif matched_rules:
+        primary_rule = list(matched_rules)[0]
+    else:
+        primary_rule = "General Safety"
 
     is_sif_bool = classification in ["SIF_POTENTIAL"]
     sev_estimate = 0.85 if is_sif_bool else (0.45 if priority == "MODERATE" else 0.20)
