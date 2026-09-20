@@ -185,11 +185,6 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             self.send_json_response(self.get_knowledge_graph())
         elif req_path == "/api/brief":
             self.send_json_response(self.build_hse_brief())
-        elif req_path in ["/data/oil_safety_reports.csv", "/api/export", "/export", "/api/export-csv", "/download-csv"]:
-            self.serve_csv_download()
-        else:
-            # Map request URL to local public folder file
-            clean_path = urllib.parse.unquote(req_path.lstrip("/"))
         elif req_path == "/api/recurring-precursors":
             self.send_json_response(self.get_recurring_precursors())
         elif req_path == "/api/predictive-risk":
@@ -1070,6 +1065,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "sources": sources,
             "grounded": True,
             "disclaimer": "Answer generated from the current safety dataset and analytics; validate operational decisions with HSE review.",
+        }
         csv_path = "data/oil_safety_reports.csv"
         if os.path.exists(csv_path):
             records = pd.read_csv(csv_path, keep_default_na=False).to_dict(orient="records")
