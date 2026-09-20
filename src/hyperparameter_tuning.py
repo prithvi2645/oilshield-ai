@@ -2,7 +2,6 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import accuracy_score, recall_score, f1_score
 from sklearn.linear_model import LogisticRegression
@@ -10,8 +9,10 @@ from sklearn.ensemble import RandomForestClassifier
 
 try:
     from src.domain_tokenizer import UpstreamDomainTokenizer
+    from src.evaluate_experiments import build_evaluation_pipeline
 except ModuleNotFoundError:
     from domain_tokenizer import UpstreamDomainTokenizer
+    from evaluate_experiments import build_evaluation_pipeline
 
 def run_grid_evaluation(data_path="data/oil_safety_reports.csv"):
     if not os.path.exists(data_path):
@@ -27,13 +28,6 @@ def run_grid_evaluation(data_path="data/oil_safety_reports.csv"):
     y_sif = df['sif_potential']
     y_lsr = df['iogp_life_saving_rule']
 
-    vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),
-        max_features=4000,
-        sublinear_tf=True,
-        stop_words='english'
-    )
-    X_vec = vectorizer.fit_transform(X_text)
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     # 1. SIF CLASSIFIER (Logistic Regression) Hyperparameters
@@ -48,15 +42,16 @@ def run_grid_evaluation(data_path="data/oil_safety_reports.csv"):
     for cw in class_weights:
         for c in c_values:
             clf = LogisticRegression(C=c, class_weight=cw, max_iter=1000, random_state=42)
-            clf.fit(X_vec, y_sif)
-            y_pred = clf.predict(X_vec)
+            evaluation_pipeline = build_evaluation_pipeline(clf)
+            evaluation_pipeline.fit(X_text, y_sif)
+            y_pred = evaluation_pipeline.predict(X_text)
 
             train_acc = accuracy_score(y_sif, y_pred) * 100
             train_rec = recall_score(y_sif, y_pred) * 100
 
-            cv_acc = cross_val_score(clf, X_vec, y_sif, cv=skf, scoring='accuracy').mean() * 100
-            cv_rec = cross_val_score(clf, X_vec, y_sif, cv=skf, scoring='recall').mean() * 100
-            cv_f1 = cross_val_score(clf, X_vec, y_sif, cv=skf, scoring='f1').mean() * 100
+            cv_acc = cross_val_score(evaluation_pipeline, X_text, y_sif, cv=skf, scoring='accuracy').mean() * 100
+            cv_rec = cross_val_score(evaluation_pipeline, X_text, y_sif, cv=skf, scoring='recall').mean() * 100
+            cv_f1 = cross_val_score(evaluation_pipeline, X_text, y_sif, cv=skf, scoring='f1').mean() * 100
 
             sif_results.append({
                 "C Param": c,
@@ -87,11 +82,12 @@ def run_grid_evaluation(data_path="data/oil_safety_reports.csv"):
                 class_weight='balanced',
                 random_state=42
             )
-            rf.fit(X_vec, y_lsr)
-            y_pred_lsr = rf.predict(X_vec)
+            evaluation_pipeline = build_evaluation_pipeline(rf)
+            evaluation_pipeline.fit(X_text, y_lsr)
+            y_pred_lsr = evaluation_pipeline.predict(X_text)
 
             train_acc = accuracy_score(y_lsr, y_pred_lsr) * 100
-            cv_acc = cross_val_score(rf, X_vec, y_lsr, cv=skf, scoring='accuracy').mean() * 100
+            cv_acc = cross_val_score(evaluation_pipeline, X_text, y_lsr, cv=skf, scoring='accuracy').mean() * 100
 
             lsr_results.append({
                 "n_estimators": n,

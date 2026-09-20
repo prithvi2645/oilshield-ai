@@ -9,6 +9,13 @@ let iogpDetailChartInstance = null;
 let severityDonutChartInstance = null;
 let monthlyTrendChartInstance = null;
 let analyticsData = null;
+let latestClassification = null;
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[character]));
+}
 let pendingDeleteReportId = null;
 
 function getChartColors() {
@@ -32,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAnalytics();
     fetchReports();
     fetchKnowledgeGraph();
+    fetchReviews();
 
     // ── PRINT ENGINE FIX: Force Executive Brief modal visible during print ──
     window.addEventListener('beforeprint', () => {
@@ -444,6 +452,18 @@ function setupEventListeners() {
         });
     });
 
+    const simulateBtn = document.getElementById('simulateBtn');
+    if (simulateBtn) simulateBtn.addEventListener('click', runSafetySimulation);
+    const qualityBtn = document.getElementById('qualityBtn');
+    if (qualityBtn) qualityBtn.addEventListener('click', checkReportQuality);
+    const copilotBtn = document.getElementById('copilotAskBtn');
+    if (copilotBtn) copilotBtn.addEventListener('click', askCopilot);
+    const briefBtn = document.getElementById('briefBtn');
+    if (briefBtn) briefBtn.addEventListener('click', generateSafetyBrief);
+    document.querySelectorAll('.review-btn').forEach(btn => {
+        btn.addEventListener('click', () => submitReview(btn.dataset.decision));
+    });
+
     // CSV Download
     const exportBtn = document.getElementById('exportDataBtn');
     if (exportBtn) {
@@ -809,6 +829,8 @@ async function fetchAnalytics() {
         renderDensityTable(analyticsData.site_rankings || []);
         renderActivityRisk(analyticsData.activity_risk || []);
         renderPrecursorAlerts(analyticsData.top_precursors || []);
+        renderRecurrenceAlerts(analyticsData.recurrence_alerts || []);
+        renderRiskMatrix(analyticsData.risk_matrix || []);
         renderSeverityDonutChart(analyticsData.severity_buckets || {});
         renderMonthlyTrend(analyticsData.monthly_trend || [], analyticsData.forecast_data || [], analyticsData.forecast_summary);
         fetchPredictiveRisk();
@@ -816,6 +838,59 @@ async function fetchAnalytics() {
     } catch (err) {
         console.error('Failed to load analytics data:', err);
     }
+}
+
+async function askCopilot() {
+    const input = document.getElementById('copilotQuestion');
+    const question = input?.value.trim();
+    if (!question) return;
+    try {
+        const response = await fetch('/api/copilot', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Copilot request failed');
+        document.getElementById('copilotAnswer').hidden = false;
+        document.getElementById('copilotAnswerText').textContent = data.answer;
+        document.getElementById('copilotSources').textContent = data.sources?.length
+            ? `Evidence: ${data.sources.map(source => source.type.replace('_', ' ')).join(', ')}` : 'Evidence: no matching analytic source';
+        document.getElementById('copilotDisclaimer').textContent = data.disclaimer || '';
+    } catch (err) {
+        console.error('Copilot request failed:', err);
+    }
+}
+
+async function generateSafetyBrief() {
+    try {
+        const response = await fetch('/api/brief');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Safety brief request failed');
+        document.getElementById('briefResult').hidden = false;
+        document.getElementById('briefTitle').textContent = `${data.title} · ${data.period}`;
+        const metrics = data.metrics || {};
+        document.getElementById('briefMetrics').textContent = `${metrics.reports_analyzed} reports analyzed · ${metrics.sif_potential_reports} SIF-potential · ${metrics.sif_rate_pct}% rate · Highest-risk site: ${metrics.highest_risk_site}`;
+        document.getElementById('briefPriorities').innerHTML = `<strong>Priorities</strong><ul>${(data.priorities || []).map(priority => `<li>${escapeHtml(priority)}</li>`).join('')}</ul>`;
+        document.getElementById('briefForecast').textContent = data.forecast || '';
+        document.getElementById('briefDisclaimer').textContent = data.disclaimer || '';
+    } catch (err) { console.error('Safety brief request failed:', err); }
+}
+
+function renderRecurrenceAlerts(alerts) {
+    const body = document.getElementById('recurrenceAlertsBody');
+    if (!body) return;
+    body.innerHTML = alerts.length ? alerts.slice(0, 8).map(alert => `
+        <tr><td>${escapeHtml(alert.site_location)}</td><td>${escapeHtml(alert.precursor_pattern)}</td>
+        <td>${escapeHtml(alert.occurrences)}</td><td><span class="risk-pill ${alert.escalation === 'MANAGEMENT_ALERT' ? 'critical' : alert.escalation === 'ESCALATE' ? 'high' : 'moderate'}">${escapeHtml(alert.escalation.replace('_', ' '))}</span></td></tr>
+    `).join('') : '<tr><td colspan="4">No repeated SIF precursor pattern currently requires escalation.</td></tr>';
+}
+
+function renderRiskMatrix(rows) {
+    const body = document.getElementById('riskMatrixBody');
+    if (!body) return;
+    body.innerHTML = rows.length ? rows.slice(0, 8).map(row => `
+        <tr><td>${escapeHtml(row.site_location)}</td><td>${escapeHtml(row.iogp_life_saving_rule)}</td>
+        <td>${escapeHtml(row.barrier_failure_type)}</td><td><strong>${escapeHtml(row.sif_density_pct)}%</strong></td></tr>
+    `).join('') : '<tr><td colspan="4">Risk matrix data is not available.</td></tr>';
 }
 
 async function fetchReports() {
@@ -829,6 +904,30 @@ async function fetchReports() {
     } catch (err) {
         console.error("Failed to load master reports table:", err);
     }
+}
+
+async function fetchReviews() {
+    try {
+        const response = await fetch('/api/reviews');
+        renderReviewQueue(await response.json());
+    } catch (err) {
+        console.error('Failed to load review queue:', err);
+    }
+}
+
+function renderReviewQueue(reviews) {
+    const body = document.getElementById('reviewQueueBody');
+    if (!body) return;
+    const recent = Array.isArray(reviews) ? reviews.slice(-8).reverse() : [];
+    body.innerHTML = recent.length ? recent.map(review => `
+        <tr>
+            <td>${escapeHtml(new Date(review.created_at).toLocaleString())}</td>
+            <td>${escapeHtml(review.reviewer)}</td>
+            <td>${escapeHtml(review.predicted_label)}</td>
+            <td>${escapeHtml(review.final_label)}</td>
+            <td><span class="risk-pill ${review.decision === 'corrected' ? 'high' : review.decision === 'rejected' ? 'critical' : 'low'}">${escapeHtml(review.decision)}</span></td>
+        </tr>
+    `).join('') : '<tr><td colspan="5">No human review decisions recorded yet.</td></tr>';
 }
 
 // ============================================================
@@ -1405,6 +1504,14 @@ function renderMasterTable() {
         const tierClass = tier.startsWith("P1") ? "tier-p1" : (tier.startsWith("P2") ? "tier-p2" : (tier.startsWith("P3") ? "tier-p3" : "tier-p4"));
 
         tr.innerHTML = `
+            <td><strong>${escapeHtml(report.report_id)}</strong></td>
+            <td>${escapeHtml(report.date)}</td>
+            <td>${escapeHtml(report.site_location)}</td>
+            <td>${escapeHtml(report.department)}</td>
+            <td>${escapeHtml(report.report_type)}</td>
+            <td>${escapeHtml(report.description.substring(0, 85))}...</td>
+            <td>${sifStatus}</td>
+            <td>${escapeHtml(report.iogp_life_saving_rule)}</td>
             <td><strong>${report.report_id}</strong></td>
             <td>${report.date}</td>
             <td>${report.site_location}</td>
@@ -1594,9 +1701,9 @@ function renderDensityTable(siteData) {
 
         tr.innerHTML = `
             <td><strong>#${idx + 1}</strong></td>
-            <td>${site.site_location}</td>
-            <td>${site.total}</td>
-            <td>${site.sif}</td>
+            <td>${escapeHtml(site.site_location)}</td>
+            <td>${escapeHtml(site.total)}</td>
+            <td>${escapeHtml(site.sif)}</td>
             <td><strong>${site.sif_density}%</strong></td>
             <td><span class="risk-pill ${riskClass}">${riskLabel}</span></td>
         `;
@@ -1617,9 +1724,9 @@ function renderActivityRisk(deptData) {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><strong>${dept.department}</strong></td>
-            <td>${dept.total}</td>
-            <td>${dept.sif}</td>
+            <td><strong>${escapeHtml(dept.department)}</strong></td>
+            <td>${escapeHtml(dept.total)}</td>
+            <td>${escapeHtml(dept.sif)}</td>
             <td>
                 <div class="density-bar-wrap">
                     <div class="density-mini-bar">
@@ -1650,8 +1757,8 @@ function renderPrecursorAlerts(precursors) {
         item.className = 'precursor-alert-item';
         item.innerHTML = `
             <div class="alert-rank">${idx + 1}</div>
-            <span class="alert-pattern">${p.pattern}</span>
-            <span class="alert-count">${p.count}×</span>
+            <span class="alert-pattern">${escapeHtml(p.pattern)}</span>
+            <span class="alert-count">${escapeHtml(p.count)}×</span>
         `;
         container.appendChild(item);
     });
@@ -1957,8 +2064,8 @@ function renderCorrectiveActions(actions) {
         const card = document.createElement('div');
         card.className = 'hoc-card';
         card.innerHTML = `
-            <span class="hoc-badge hoc-${levelSlug}">${item.level}</span>
-            <span class="hoc-desc">${item.action}</span>
+            <span class="hoc-badge hoc-${escapeHtml(levelSlug)}">${escapeHtml(item.level)}</span>
+            <span class="hoc-desc">${escapeHtml(item.action)}</span>
         `;
         container.appendChild(card);
     });
@@ -2002,12 +2109,12 @@ function renderSimilarReports(reports) {
         item.title = 'Hover to view full report observation popover';
         item.innerHTML = `
             <div class="similar-info">
-                <div class="similar-title">${r.report_id} — ${r.report_title}</div>
-                <div class="similar-desc">${r.description}</div>
+                <div class="similar-title">${escapeHtml(r.report_id)} — ${escapeHtml(r.report_title)}</div>
+                <div class="similar-desc">${escapeHtml(r.description)}</div>
                 <div class="similar-meta">
-                    <span>Installation: <strong>${r.site_location}</strong></span>
+                    <span>Installation: <strong>${escapeHtml(r.site_location)}</strong></span>
                     <span>&middot;</span>
-                    <span>Rule: <strong>${r.iogp_rule}</strong></span>
+                    <span>Rule: <strong>${escapeHtml(r.iogp_rule)}</strong></span>
                     <span>&middot;</span>
                     ${sifBadge}
                 </div>
@@ -2042,6 +2149,13 @@ async function runClassification() {
         });
 
         const data = await response.json();
+        latestClassification = data;
+        const reviewPanel = document.getElementById('reviewPanel');
+        if (reviewPanel) reviewPanel.hidden = false;
+        const finalLabel = document.getElementById('finalLabelSelect');
+        if (finalLabel) finalLabel.value = data.classification_label || 'NON_SIF_OBSERVATION';
+        const reviewStatus = document.getElementById('reviewStatus');
+        if (reviewStatus) reviewStatus.textContent = '';
 
         // Feature 16 — Language Badge Update
         const langBadge = document.getElementById('langBadge');
@@ -2142,9 +2256,17 @@ async function runClassification() {
         const resRule = document.getElementById('resRule');
         const resEnergy = document.getElementById('resEnergy');
         const resBarrier = document.getElementById('resBarrier');
+        const resLsrAgreement = document.getElementById('resLsrAgreement');
+        if (resRule)    resRule.textContent    = data.iogp_life_saving_rule || '—';
+        if (resEnergy)  resEnergy.textContent  = formatEnergySource(data.energy_sources);
         if (resRule) resRule.textContent = data.iogp_life_saving_rule || '—';
         if (resEnergy) resEnergy.textContent = formatEnergySource(data.energy_sources);
         if (resBarrier) resBarrier.textContent = BARRIER_LABELS[data.barrier_condition] || data.barrier_condition || '—';
+        if (resLsrAgreement) {
+            resLsrAgreement.textContent = data.lsr_model_agreement === null
+                ? 'Unavailable'
+                : data.lsr_model_agreement ? 'Agrees' : `Differs: ${data.lsr_model_rule || 'Unknown'}`;
+        }
 
         // ── Rationale and action plan ─────────────────────────────────────
         const resRationale = document.getElementById('resRationale');
@@ -2162,6 +2284,67 @@ async function runClassification() {
         console.error('Incident classification request failed:', err);
     } finally {
         if (analyzeBtn) { analyzeBtn.disabled = (currentRole === 'analyst'); analyzeBtn.textContent = 'Classify Incident'; }
+    }
+}
+
+async function runSafetySimulation() {
+    const text = document.getElementById('classifierTextarea')?.value.trim();
+    if (!text) return;
+    try {
+        const response = await fetch('/api/simulate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        const result = document.getElementById('simulationResult');
+        if (result) result.hidden = false;
+        document.getElementById('simulationSteps').innerHTML = (data.steps || []).map(step => `<p><strong>${escapeHtml(step.stage)}:</strong> ${escapeHtml(step.outcome)}</p>`).join('');
+        document.getElementById('simulationIntervention').textContent = `Recommended intervention: ${data.recommended_intervention || 'Review controls before resuming.'}`;
+        document.getElementById('simulationWarning').textContent = data.warning || '';
+    } catch (err) { console.error('Safety simulation request failed:', err); }
+}
+
+async function checkReportQuality() {
+    const text = document.getElementById('classifierTextarea')?.value || '';
+    try {
+        const response = await fetch('/api/report-quality', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        const result = document.getElementById('qualityResult');
+        if (result) result.hidden = false;
+        document.getElementById('qualitySummary').textContent = data.quality === 'SUFFICIENT'
+            ? 'The report contains the minimum context for triage.'
+            : `Missing context: ${(data.missing_fields || []).join(', ')}`;
+        document.getElementById('qualityQuestions').innerHTML = (data.clarification_questions || []).map(question => `<li>${escapeHtml(question)}</li>`).join('');
+    } catch (err) { console.error('Report quality request failed:', err); }
+}
+
+async function submitReview(decision) {
+    if (!latestClassification) return;
+    const text = document.getElementById('classifierTextarea')?.value.trim();
+    const finalLabel = document.getElementById('finalLabelSelect')?.value || latestClassification.classification_label;
+    const reviewer = document.getElementById('reviewerName')?.value.trim() || 'dashboard-user';
+    const comment = document.getElementById('reviewComment')?.value || '';
+    const status = document.getElementById('reviewStatus');
+    try {
+        const response = await fetch('/api/reviews', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text,
+                reviewer,
+                decision,
+                predicted_label: latestClassification.classification_label,
+                final_label: finalLabel,
+                comment
+            })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Review could not be saved');
+        if (status) status.textContent = `Review saved: ${data.review_id}`;
+    } catch (err) {
+        if (status) status.textContent = `Review failed: ${err.message}`;
+        console.error('Review submission failed:', err);
     }
 }
 

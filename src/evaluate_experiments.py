@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier
@@ -13,6 +14,19 @@ try:
     from src.domain_tokenizer import UpstreamDomainTokenizer
 except ModuleNotFoundError:
     from domain_tokenizer import UpstreamDomainTokenizer
+
+
+def build_evaluation_pipeline(model):
+    """Build a fold-safe text model so TF-IDF learns only from each train fold."""
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(
+            ngram_range=(1, 2),
+            max_features=4000,
+            sublinear_tf=True,
+            stop_words="english"
+        )),
+        ("model", model),
+    ])
 
 def run_experiments(data_path="data/oil_safety_reports.csv"):
     if not os.path.exists(data_path):
@@ -26,15 +40,6 @@ def run_experiments(data_path="data/oil_safety_reports.csv"):
     X_raw = df['description'].fillna("")
     X_text = [domain_tokenizer.normalize(txt)[0] for txt in X_raw]
     y_sif = df['sif_potential']
-
-    # Vectorizer
-    vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),
-        max_features=4000,
-        sublinear_tf=True,
-        stop_words='english'
-    )
-    X_vec = vectorizer.fit_transform(X_text)
 
     # Candidate Algorithms & Hyperparameters
     models = {
@@ -61,7 +66,8 @@ def run_experiments(data_path="data/oil_safety_reports.csv"):
     print("="*80)
 
     for name, model in models.items():
-        cv_results = cross_validate(model, X_vec, y_sif, cv=cv, scoring=scoring)
+        evaluation_pipeline = build_evaluation_pipeline(model)
+        cv_results = cross_validate(evaluation_pipeline, X_text, y_sif, cv=cv, scoring=scoring)
         acc_mean = cv_results['test_accuracy'].mean() * 100
         prec_mean = cv_results['test_precision'].mean() * 100
         rec_mean = cv_results['test_recall'].mean() * 100

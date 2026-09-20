@@ -13,6 +13,10 @@ ENV/
 *.log
 *.tmp
 
+# Runtime governance stores
+data/review_decisions.json
+data/audit_events.json
+
 # OS / IDE metadata
 .DS_Store
 Thumbs.db

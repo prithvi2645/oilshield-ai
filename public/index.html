@@ -914,6 +914,56 @@
                 </div>
             </div>
 
+            <div class="corp-card copilot-card" style="margin-bottom: var(--space-lg);">
+                <div class="card-title">
+                    <div>
+                        <h3>HSE Safety Copilot</h3>
+                        <p class="card-subtitle">Ask grounded questions about the current safety dataset and analytics</p>
+                    </div>
+                    <span class="badge">Dataset grounded</span>
+                </div>
+                <div class="copilot-input-row">
+                    <input class="corp-input" id="copilotQuestion" type="text" maxlength="2000" placeholder="Which site requires the most attention?">
+                    <button class="btn btn-primary" id="copilotAskBtn">Ask Copilot</button>
+                        <button class="btn btn-secondary" id="briefBtn">Generate Safety Brief</button>
+                </div>
+                <div class="copilot-answer" id="copilotAnswer" hidden>
+                    <strong id="copilotAnswerText"></strong>
+                    <div id="copilotSources"></div>
+                    <small id="copilotDisclaimer"></small>
+                </div>
+                <div class="copilot-answer" id="briefResult" hidden>
+                    <strong id="briefTitle"></strong>
+                    <div id="briefMetrics"></div>
+                    <div id="briefPriorities"></div>
+                    <div id="briefForecast"></div>
+                    <small id="briefDisclaimer"></small>
+                </div>
+            </div>
+
+            <div class="corp-card" style="margin-bottom: var(--space-lg);">
+                <div class="card-title">
+                    <div>
+                        <h3>Human Review Queue</h3>
+                        <p class="card-subtitle">Recent HSE decisions recorded against AI assessments</p>
+                    </div>
+                    <span class="badge badge-amber">Governance</span>
+                </div>
+                <div class="table-container">
+                    <table class="corp-table">
+                        <thead><tr><th>Time</th><th>Reviewer</th><th>AI Label</th><th>Final Label</th><th>Decision</th></tr></thead>
+                        <tbody id="reviewQueueBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Row 2: Site chart + IOGP donut -->
+            <div class="dash-grid-6040">
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>SIF Precursor Density by Site</h3>
+                            <p class="card-subtitle">Ranked by proportion of SIF-potential reports per installation</p>
             <!-- DASHBOARD SECTION 1: OVERVIEW & SIF TRENDS -->
             <div id="dashSecOverview" class="dash-section-block">
                 <!-- Row 2: Site chart + IOGP donut -->
@@ -957,6 +1007,49 @@
                     <div class="chart-holder-large">
                         <canvas id="monthlyTrendChart"></canvas>
                     </div>
+                </div>
+            </div>
+
+            <div class="dash-grid-6040" style="margin-bottom: var(--space-lg);">
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>Recurrence Escalation Alerts</h3>
+                            <p class="card-subtitle">Repeated SIF precursor patterns requiring monitoring or management action</p>
+                        </div>
+                        <span class="badge badge-red">Persistence intelligence</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="corp-table">
+                            <thead><tr><th>Site</th><th>Precursor</th><th>Occurrences</th><th>Action</th></tr></thead>
+                            <tbody id="recurrenceAlertsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="corp-card">
+                    <div class="card-title">
+                        <div>
+                            <h3>Cross-Dimensional Risk Matrix</h3>
+                            <p class="card-subtitle">Highest-density combinations of site, activity, rule, and barrier</p>
+                        </div>
+                        <span class="badge badge-amber">Top 50</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="corp-table">
+                            <thead><tr><th>Site</th><th>Rule</th><th>Barrier</th><th>SIF Density</th></tr></thead>
+                            <tbody id="riskMatrixBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 5: Monthly trend & Temporal Forecast -->
+            <div class="corp-card">
+                <div class="card-title">
+                    <div>
+                        <h3>Monthly SIF Precursor Trend &amp; Temporal Forecast</h3>
+                        <p class="card-subtitle">Total observations vs SIF-potential count over time &mdash; with 2-month linear projection</p>
                     <!-- Feature 9: Temporal Forecast Alert Banner -->
                     <div class="forecast-alert-banner" id="forecastAlertBanner">
                         <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
@@ -1059,6 +1152,10 @@
                             <div class="risk-matrix-grid" id="riskMatrixGrid">
                                 <!-- 5x5 cells rendered dynamically by JS -->
                             </div>
+                            <div class="p-box">
+                                <span class="p-title">LSR Model Agreement</span>
+                                <span class="p-value" id="resLsrAgreement">Pending</span>
+                            </div>
                         </div>
                         <div class="matrix-axis-x">Consequence &rarr;</div>
                         <div class="matrix-legend-strip">
@@ -1111,6 +1208,41 @@
                                 </div>
                                 <p class="sim-summary-txt" id="simSummaryTxt">Select a barrier toggle above to run instant escalation analysis.</p>
                             </div>
+                        </div>
+
+                        <div class="decision-tools">
+                            <button class="btn btn-secondary" id="simulateBtn">Run What-If Safety Simulation</button>
+                            <button class="btn btn-secondary" id="qualityBtn">Check Report Quality</button>
+                        </div>
+                        <div class="info-card decision-result" id="simulationResult" hidden>
+                            <strong>What-if safety simulation</strong>
+                            <div id="simulationSteps"></div>
+                            <p id="simulationIntervention"></p>
+                            <small id="simulationWarning"></small>
+                        </div>
+                        <div class="info-card decision-result" id="qualityResult" hidden>
+                            <strong>Report quality assessment</strong>
+                            <p id="qualitySummary"></p>
+                            <ul id="qualityQuestions"></ul>
+                        </div>
+                        <div class="info-card review-panel" id="reviewPanel" hidden>
+                            <strong>Human-in-the-loop review</strong>
+                            <p class="review-help">Record the HSE decision without changing the original AI assessment.</p>
+                            <div class="review-fields">
+                                <input class="corp-input" id="reviewerName" type="text" maxlength="120" placeholder="Reviewer name">
+                                <select class="corp-input" id="finalLabelSelect">
+                                    <option value="SIF_POTENTIAL">SIF Potential</option>
+                                    <option value="DEFENDED_NEAR_MISS">Defended Near-Miss</option>
+                                    <option value="NON_SIF_OBSERVATION">Non-SIF Observation</option>
+                                </select>
+                            </div>
+                            <textarea class="corp-input" id="reviewComment" rows="2" maxlength="2000" placeholder="Optional review comment"></textarea>
+                            <div class="decision-tools">
+                                <button class="btn btn-secondary review-btn" data-decision="accepted">Accept AI Assessment</button>
+                                <button class="btn btn-secondary review-btn" data-decision="rejected">Reject AI Assessment</button>
+                                <button class="btn btn-secondary review-btn" data-decision="corrected">Save Corrected Assessment</button>
+                            </div>
+                            <p class="review-status" id="reviewStatus" role="status"></p>
                         </div>
                     </div>
 
