@@ -233,8 +233,6 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/classify":
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length).decode('utf-8')
             try:
                 data = self._read_json_body()
                 if not isinstance(data, dict):
@@ -455,25 +453,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "Endpoint not found")
 
     def read_json_body(self):
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-        except (TypeError, ValueError):
-            raise ValueError("Invalid Content-Length header.")
-
-        if content_length <= 0:
-            raise ValueError("Request body is required.")
-        if content_length > 100_000:
-            raise ValueError("Request body is too large.")
-
-        try:
-            post_data = self.rfile.read(content_length).decode("utf-8")
-            data = json.loads(post_data)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            raise ValueError("Request body must contain valid UTF-8 JSON.")
-
-        if not isinstance(data, dict):
-            raise ValueError("Request body must be a JSON object.")
-        return data
+        return self._read_json_body()
 
     def create_report(self, data):
         if not REQUIRED_REPORT_FIELDS.issubset(data):
@@ -799,7 +779,9 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if abs_path.is_file():
             self.send_response(200)
             self.send_header("Content-Type", content_type)
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             with open(abs_path, "rb") as f:
                 self.wfile.write(f.read())
@@ -1299,39 +1281,41 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         csv_path = os.path.abspath("data/oil_safety_reports.csv")
         baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
         try:
-            df = pd.read_csv(csv_path if os.path.isfile(csv_path) else baseline_path)
+            df = pd.read_csv(csv_path if os.path.isfile(csv_path) else baseline_path, keep_default_na=False)
         except Exception:
             return {"queue": [], "total": 0}
 
         queue = []
-        sample_texts = df["description"].dropna().tolist()
 
         for _, row in df.iterrows():
             desc = str(row.get("description", ""))
             if not desc or len(desc) < 20:
                 continue
 
-            # Use the ML pipeline to score confidence
-            try:
-                result = pipeline.predict(desc)
-                confidence = result.get("confidence_score", 100)
-                sif_label = result.get("verdict", "NON_SIF_OBSERVATION")
-            except Exception:
-                continue
-
-            # Flag for review: confidence 40-75%, or barrier is "Unknown"
             barrier = str(row.get("barrier_failure_type", ""))
-            needs_review = (40 <= confidence <= 75) or ("unknown" in barrier.lower()) or ("unconfirmed" in barrier.lower())
 
-            if needs_review and len(queue) < 15:
+            # Use CSV sif_severity_score (0-1 scale) as fast confidence proxy
+            raw_score = row.get("sif_severity_score", None)
+            try:
+                confidence_pct = float(raw_score) * 100  # convert 0-1 → 0-100
+            except (TypeError, ValueError):
+                confidence_pct = 50.0  # default to mid-confidence if missing
+
+            sif_val = str(row.get("sif_potential", ""))
+            sif_label = "SIF_POTENTIAL" if sif_val.upper() in ("YES", "TRUE", "1") or sif_val == "1" else "NON_SIF_OBSERVATION"
+
+            # Flag for review: confidence 40-75%, or barrier is "Unknown/Unconfirmed"
+            needs_review = (40 <= confidence_pct <= 75) or ("unknown" in barrier.lower()) or ("unconfirmed" in barrier.lower())
+
+            if needs_review and len(queue) < 20:
                 queue.append({
                     "report_id": str(row.get("report_id", "")),
                     "date": str(row.get("date", "")),
                     "site": str(row.get("site_location", "")),
                     "department": str(row.get("department", "")),
-                    "description": desc[:180] + ("..." if len(desc) > 180 else ""),
+                    "description": desc[:200] + ("..." if len(desc) > 200 else ""),
                     "ai_verdict": sif_label,
-                    "ai_confidence": round(confidence, 1),
+                    "ai_confidence": round(confidence_pct, 1),
                     "barrier": barrier,
                     "iogp_rule": str(row.get("iogp_life_saving_rule", "")),
                     "review_status": str(row.get("review_status", "PENDING_REVIEW"))
@@ -1764,10 +1748,10 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             for _, row in grouped.iterrows()
         ]
 
-def run_server(port=8080):
+def run_server(port=None):
+    if port is None:
+        port = int(os.environ.get("PORT", 8081))
     PUBLIC_DIR.mkdir(exist_ok=True)
-def run_server(port=8081):
-    os.makedirs("public", exist_ok=True)
     server_address = ('', port)
     httpd = ThreadingHTTPServer(server_address, SafetyDashboardHandler)
     print(f"[SUCCESS] Oil India Safety AI Dashboard Server running at http://localhost:{port}")
@@ -1776,3 +1760,76 @@ def run_server(port=8081):
 if __name__ == "__main__":
     run_server()
 
+
+
+from io import BytesIO
+
+class VercelWSGIAdapter:
+    def __init__(self, handler_cls):
+        self.handler_cls = handler_cls
+
+    def __call__(self, environ, start_response):
+        method = environ.get('REQUEST_METHOD', 'GET')
+        path = environ.get('PATH_INFO', '/')
+        query = environ.get('QUERY_STRING', '')
+        if query:
+            path += '?' + query
+
+        content_length = int(environ.get('CONTENT_LENGTH', 0) or 0)
+        body = environ['wsgi.input'].read(content_length) if content_length > 0 else b''
+
+        headers = [f"{method} {path} HTTP/1.1"]
+        for k, v in environ.items():
+            if k.startswith('HTTP_'):
+                header_name = k[5:].replace('_', '-').title()
+                headers.append(f"{header_name}: {v}")
+            elif k in ('CONTENT_TYPE', 'CONTENT_LENGTH'):
+                header_name = k.replace('_', '-').title()
+                headers.append(f"{header_name}: {v}")
+
+        header_str = "\r\n".join(headers) + "\r\n\r\n"
+        req_data = header_str.encode('utf-8') + body
+
+        rfile = BytesIO(req_data)
+        wfile = BytesIO()
+
+        class MockSocket:
+            def __init__(self, r, w):
+                self._r = r
+                self._w = w
+            def makefile(self, mode, *args, **kwargs):
+                return self._r if 'r' in mode else self._w
+            def sendall(self, data):
+                self._w.write(data)
+
+        mock_sock = MockSocket(rfile, wfile)
+        try:
+            self.handler_cls(mock_sock, ('127.0.0.1', 80), None)
+        except Exception:
+            pass
+
+        wfile.seek(0)
+        raw_res = wfile.read()
+
+        if b"\r\n\r\n" in raw_res:
+            header_raw, body_raw = raw_res.split(b"\r\n\r\n", 1)
+        else:
+            header_raw, body_raw = raw_res, b""
+
+        header_lines = header_raw.decode('utf-8', errors='replace').split("\r\n")
+        status_line = header_lines[0] if header_lines else "HTTP/1.1 200 OK"
+        parts = status_line.split(" ", 2)
+        status_code_str = parts[1] + " " + parts[2] if len(parts) >= 3 else "200 OK"
+
+        res_headers = []
+        for line in header_lines[1:]:
+            if ":" in line:
+                name, val = line.split(":", 1)
+                res_headers.append((name.strip(), val.strip()))
+
+        start_response(status_code_str, res_headers)
+        return [body_raw]
+
+app = VercelWSGIAdapter(SafetyDashboardHandler)
+application = app
+handler = app

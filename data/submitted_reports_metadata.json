@@ -1,1 +1,22 @@
-{}
+{
+  "OIL-HSE-2025-1501": {
+    "report_id": "OIL-HSE-2025-1501",
+    "created_at": "2026-09-20T17:56:34.230691",
+    "is_new_submission": true
+  },
+  "OIL-HSE-2025-1502": {
+    "report_id": "OIL-HSE-2025-1502",
+    "created_at": "2026-09-20T18:17:34.215114",
+    "is_new_submission": true
+  },
+  "OIL-HSE-2025-1503": {
+    "report_id": "OIL-HSE-2025-1503",
+    "created_at": "2026-09-20T18:19:31.850932",
+    "is_new_submission": true
+  },
+  "OIL-HSE-2025-1504": {
+    "report_id": "OIL-HSE-2025-1504",
+    "created_at": "2026-09-20T19:03:42.858342",
+    "is_new_submission": true
+  }
+}

@@ -236,8 +236,14 @@ class SafetyClassifierPipeline:
 
         # 2. ML Probability Score
         if self.is_trained and self.vectorizer and self.sif_model:
-            vec = self.vectorizer.transform([normalized_text])
-            ml_prob = float(self.sif_model.predict_proba(vec)[0][1])
+            try:
+                vec = self.vectorizer.transform([normalized_text])
+                ml_prob = float(self.sif_model.predict_proba(vec)[0][1])
+            except Exception as e:
+                print(f"[WARN] ML Predict Error ({e}). Re-training pipeline on dataset...")
+                self.train()
+                vec = self.vectorizer.transform([normalized_text])
+                ml_prob = float(self.sif_model.predict_proba(vec)[0][1])
         else:
             ml_prob = 0.88 if dekra_result["is_sif_potential"] else 0.12
 
@@ -259,10 +265,13 @@ class SafetyClassifierPipeline:
         lsr_model_rule = "UNAVAILABLE"
         lsr_model_confidence = 0.0
         if self.is_trained and self.vectorizer and self.lsr_model:
-            lsr_vector = self.vectorizer.transform([normalized_text])
-            lsr_model_rule = str(self.lsr_model.predict(lsr_vector)[0])
-            if hasattr(self.lsr_model, "predict_proba"):
-                lsr_model_confidence = float(self.lsr_model.predict_proba(lsr_vector)[0].max())
+            try:
+                lsr_vector = self.vectorizer.transform([normalized_text])
+                lsr_model_rule = str(self.lsr_model.predict(lsr_vector)[0])
+                if hasattr(self.lsr_model, "predict_proba"):
+                    lsr_model_confidence = float(self.lsr_model.predict_proba(lsr_vector)[0].max())
+            except Exception as e:
+                print(f"[WARN] LSR Model predict error: {e}")
 
         # 5. Generate OISD Barrier Action Plan & Hierarchy of Controls
         # 5. Confidence + Human-in-the-Loop (HITL) Calculation

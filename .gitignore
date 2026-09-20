@@ -22,3 +22,8 @@ data/audit_events.json
 Thumbs.db
 .vscode/
 .idea/
+
+# Scratch & temporary scripts
+scratch/
+scratch_*
+
