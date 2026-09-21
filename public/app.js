@@ -1,4 +1,4 @@
-// Oil India Limited  —  HSSE SIF Precursor Management System
+﻿// Oil India Limited  —  HSSE SIF Precursor Management System
 
 let masterReports = [];
 let filteredReports = [];
@@ -1417,7 +1417,7 @@ window.sendAskAi = async function() {
     // User question bubble
     thread.innerHTML += `
         <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
-            <div style="background:var(--primary, #0284c7); color:#fff; padding:10px 14px; border-radius:12px 12px 2px 12px; max-width:75%; font-size:13px; font-weight:600;">${escapeHtml(question)}</div>
+            <div style="background:var(--amber); color:#fff; padding:10px 14px; border-radius:12px 12px 2px 12px; max-width:75%; font-size:13px; font-weight:600;">${escapeHtml(question)}</div>
         </div>`;
     thread.scrollTop = thread.scrollHeight;
 
@@ -1452,7 +1452,7 @@ window.sendAskAi = async function() {
 
         thread.innerHTML += `
             <div style="display:flex; justify-content:flex-start; margin-bottom:14px;">
-                <div style="background:rgba(255,255,255,0.06); border:1px solid var(--border-color, rgba(255,255,255,0.1)); color:var(--text-primary, #f8fafc); padding:12px 16px; border-radius:12px 12px 12px 2px; max-width:85%; font-size:13px; line-height:1.6;">
+                <div style="background:#FFFFFF; border:1px solid var(--border-color, rgba(255,255,255,0.1)); color:var(--text-primary, #f8fafc); padding:12px 16px; border-radius:12px 12px 12px 2px; max-width:85%; font-size:13px; line-height:1.6;">
                     <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:11px; color:var(--amber, #f59e0b); font-weight:700;">
                         <span>OIL Safety AI Engine  •  Grounded Dataset Query</span>
                     </div>
@@ -1916,8 +1916,8 @@ function renderKgNodes(container, nodes, linkPaths, pathSel, groupColors) {
         .attr('style', 'cursor:pointer;')
         .attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
 
-    const pillBg = '#0f172a';
-    const pillTxt = '#f8fafc';
+    const pillBg = '#FFFFFF';
+    const pillTxt = '#0F172A';
     const pillW = 210;
     const pillH = 36;
 
@@ -2022,15 +2022,15 @@ function populateClassifierDropdown() {
     const dropdown = document.getElementById('classifierDatasetDropdown');
     if (!dropdown) return;
 
-    dropdown.innerHTML = '<option value="" style="background:#1e293b; color:#94a3b8;">-- Select from 500 Historical Reports Dataset --</option>';
+    dropdown.innerHTML = '<option value="" style="color:var(--text-muted);">-- Select from 500 Historical Reports Dataset --</option>';
 
     if (!masterReports || masterReports.length === 0) return;
 
     masterReports.forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.report_id || r.id;
-        opt.style.background = '#1e293b';
-        opt.style.color = '#f8fafc';
+        opt.style.background = '';
+        opt.style.color = '';
         const site = r.site_location ? ` [${r.site_location}]` : '';
         const title = r.report_title || r.description || 'Report';
         const titleTrunc = title.length > 70 ? title.substring(0, 67) + '...' : title;

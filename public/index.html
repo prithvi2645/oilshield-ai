@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -58,7 +58,7 @@
             <div class="brand-block">
                 <div class="oil-emblem">OIL</div>
                 <div class="brand-info">
-                    <h1>Oil India Limited</h1>
+                    <h1>OilShield AI</h1>
                     <span class="sub-brand">HSSE  —  SIF Precursor Management System</span>
                 </div>
             </div>
@@ -107,7 +107,7 @@
                         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 12px; height: 12px;"><polyline points="6 9 12 15 18 9"/></svg>
                     </button>
                     
-                    <div class="unified-header-menu" id="unifiedHeaderMenu" style="display: none; position: absolute; right: 0; top: 115%; width: 310px; background: var(--bg-card, #151d2a); border: 1px solid var(--border-strong, #334155); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 9999; padding: 14px; font-size: 13px;">
+                    <div class="unified-header-menu" id="unifiedHeaderMenu" style="display: none; position: absolute; right: 0; top: 115%; width: 310px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.10); z-index: 9999; padding: 14px; font-size: 13px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);">Switch Active Access Role</div>
                         <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;">
                             <button class="menu-role-opt active" data-role="hse_manager" onclick="selectUnifiedRole('hse_manager')">HSE Manager (Full Access)</button>
@@ -120,7 +120,7 @@
                         <div style="display: flex; flex-direction: column; gap: 6px;">
                             <button class="menu-action-btn" onclick="openPrintableBriefModal()">
                                 <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                <span>Printable Executive Brief (Recent Activity)</span>
+                                <span>Generate HSE Brief Report (Printable)</span>
                             </button>
                             <button class="menu-action-btn" onclick="window.location.href='/api/export-csv'">
                                 <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -583,52 +583,6 @@
                 </div>
             </div>
 
-            <!-- Triage Quick Action & Sorting Filter Bar -->
-            <div class="dashboard-triage-bar" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; padding: 12px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 10px; box-shadow: var(--shadow-sm);">
-                <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-right: 4px;">
-                    <svg class="svg-icon icon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                    1-Click Classification Triage &amp; Sort:
-                </span>
-                <button class="btn btn-secondary btn-sm triage-btn active" onclick="triageFilterDashboard('all')">All 500 Observations</button>
-                <button class="btn btn-secondary btn-sm triage-btn" onclick="triageFilterDashboard('sif')">
-                    <span style="color:var(--red); font-weight:800;">●</span> SIF Precursors (High Risk)
-                </button>
-                <button class="btn btn-secondary btn-sm triage-btn" onclick="triageFilterDashboard('nonsif')">
-                    <span style="color:var(--green); font-weight:800;">●</span> Non-SIF Observations
-                </button>
-                <button class="btn btn-secondary btn-sm triage-btn" onclick="triageFilterDashboard('line_of_fire')">Line of Fire Hazards</button>
-                <button class="btn btn-secondary btn-sm triage-btn" onclick="triageFilterDashboard('unsafe_condition')">Unsafe Conditions</button>
-                <button class="btn btn-secondary btn-sm triage-btn" onclick="triageFilterDashboard('review_queue')" style="color:var(--amber, #ff6b00); border-color:var(--amber, #ff6b00); font-weight:700;">
-                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/></svg>
-                    Review Queue
-                </button>
-            </div>
-
-            <!-- Executive Brief Summary Output Card -->
-            <div class="corp-card" style="margin-bottom: var(--space-lg);" id="executiveBriefCard">
-                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                    <div>
-                        <h3>Executive Safety Brief &amp; Strategic Summary Output</h3>
-                        <p class="card-subtitle">Automated executive intelligence summary generated from live 500 reports dataset &amp; OISD/IOGP safety directives</p>
-                    </div>
-                    <button class="btn btn-primary btn-sm" id="briefBtn" onclick="generateSafetyBrief()">
-                        <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                        <span>Generate Executive Brief Output</span>
-                    </button>
-                </div>
-
-                <div id="briefResult" class="brief-output-container" hidden style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; margin-top: 14px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
-                        <h4 id="briefTitle" style="color: var(--amber); font-size: 15px; font-weight: 700; margin:0;">Oil India Limited  •  Executive Safety Brief</h4>
-                        <span class="badge badge-amber">Automated AI Summary</span>
-                    </div>
-                    <div id="briefMetrics" style="font-weight: 600; color: var(--text-primary); margin-bottom: 12px; font-size: 13px;"></div>
-                    <div id="briefPriorities" style="color: var(--text-secondary); margin-bottom: 12px; font-size: 13px; line-height: 1.6;"></div>
-                    <div id="briefForecast" style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--amber); padding: 10px 14px; border-radius: 4px; font-size: 12.5px; color: var(--text-primary); margin-bottom: 10px;"></div>
-                    <small id="briefDisclaimer" style="color: var(--text-muted); font-size: 11px; display: block;"></small>
-                </div>
-            </div>
-
             <!-- KPI Strip -->
             <div class="kpi-banner">
                 <div class="kpi-box">
@@ -957,7 +911,7 @@
                                 <span><strong>Browse &amp; Select Live Dataset Report (500 Records):</strong></span>
                                 <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--amber, #f59e0b); font-size: 10px;">500 Observations</span>
                             </label>
-                            <select id="classifierDatasetDropdown" class="corp-input" onchange="loadReportFromDropdown(this.value)" style="width: 100%; border-color: var(--amber, #f59e0b); background: rgba(15, 23, 42, 0.9); font-weight: 500; font-size: 13px;">
+                            <select id="classifierDatasetDropdown" class="corp-input" onchange="loadReportFromDropdown(this.value)" style="width: 100%; border-color: var(--amber, #f59e0b); background: var(--bg-card); color: var(--text-primary); font-weight: 500; font-size: 13px;">
                                 <option value="">-- Select any of the 500 live dataset safety reports to auto-classify --</option>
                             </select>
                         </div>
@@ -1272,7 +1226,7 @@
                 </div>
 
                 <!-- Chat Thread -->
-                <div id="askAiThread" style="min-height: 120px; max-height: 520px; overflow-y: auto; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 10px; padding: 16px; background: rgba(0,0,0,0.2);">
+                <div id="askAiThread" style="min-height: 120px; max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--bg-page);">
                     <div class="ask-ai-welcome">
                         <p style="color: var(--text-muted); font-size: 13px; text-align: center; margin: 32px 0;">Ask a question above to query the live OIL safety dataset. All answers are derived directly from the data &mdash; no AI guessing.</p>
                     </div>
@@ -1432,7 +1386,7 @@
          PRINTABLE EXECUTIVE SAFETY BRIEF MODAL
     ============================================================ -->
     <div class="role-modal-overlay" id="printableBriefModalOverlay" style="display:none; z-index:10000; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px);">
-        <div class="role-modal" style="max-width:850px; width:92%; max-height:90vh; overflow-y:auto; padding:28px; background:var(--bg-card, #151d2a); border:1px solid var(--border-strong, #334155); border-radius:16px;">
+        <div class="role-modal" style="max-width:850px; width:92%; max-height:90vh; overflow-y:auto; padding:28px; background:var(--bg-card, #FFFFFF); border:1px solid #E2E8F0; border-radius:16px; box-shadow:0 20px 60px rgba(15,23,42,0.18);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:2px solid var(--amber, #ff6b00); padding-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:12px;">
                     <div class="oil-emblem" style="padding:6px 12px; font-size:15px;">OIL</div>
