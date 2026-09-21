@@ -1,4 +1,4 @@
-﻿// Oil India Limited  —  HSSE SIF Precursor Management System
+// Oil India Limited  —  HSSE SIF Precursor Management System
 
 let masterReports = [];
 let filteredReports = [];
@@ -2426,30 +2426,39 @@ window.closePrintableBriefModal = function() {
 };
 
 // ============================================================
-// DASHBOARD VIEW MODE TOGGLE (Key Summary vs Extended View)
+// DASHBOARD SECTION TAB NAVIGATION
 // ============================================================
-window.toggleDashboardViewMode = function(mode) {
-    const isSummary = mode === 'summary';
+window.switchDashSection = function(section) {
+    const tab = document.getElementById('tab-overview');
+    if (!tab) return;
 
-    // Cards to hide in Summary Mode (so user gets a clean compact view of key metrics)
-    const extendedCardIds = [
-        'activityRiskTable',
-        'barrierFailureChart',
-        'severityDonutChart',
-        'precursorAlertsList',
-        'recurrenceAlertsBody',
-        'riskMatrixBody',
-        'monthlyTrendChart',
-        'knowledgeGraphCard'
-    ];
-
-    extendedCardIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            const cardParent = el.closest('.corp-card, .dash-grid-6040, .dash-grid-333333');
-            if (cardParent) cardParent.style.display = isSummary ? 'none' : 'block';
+    // All elements with data-dash-section
+    const allSections = tab.querySelectorAll('[data-dash-section]');
+    allSections.forEach(el => {
+        if (section === 'all') {
+            el.style.display = '';
+        } else {
+            el.style.display = el.getAttribute('data-dash-section') === section ? '' : 'none';
         }
     });
 
-    showToast(isSummary ? 'Dashboard set to Key Summary View (Core Metrics)' : 'Dashboard set to Complete Extended View', 'info');
+    // Update active button
+    const tabs = document.querySelectorAll('.dash-stab');
+    tabs.forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-section') === section);
+    });
+
+    const labels = {
+        summary: 'KPI Overview',
+        risk: 'Site Risk & Forecast',
+        barriers: 'Barriers & Patterns',
+        trends: 'Trends & Knowledge Graph',
+        all: 'All Sections'
+    };
+    showToast('Dashboard: ' + (labels[section] || section), 'info');
+};
+
+// Keep backward compat if anything still calls the old function
+window.toggleDashboardViewMode = function(mode) {
+    switchDashSection(mode === 'summary' ? 'summary' : 'all');
 };

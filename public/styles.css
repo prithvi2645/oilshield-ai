@@ -4041,3 +4041,96 @@ body.dark-mode .hse-summary-modal {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
 }
+
+/* ── Dashboard Section Tab Buttons ─────────────────────────────── */
+.dash-section-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.dash-stab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-body);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.dash-stab:hover {
+    color: var(--text-primary);
+    border-color: var(--amber);
+    background: var(--amber-light);
+}
+
+.dash-stab.active {
+    background: var(--amber);
+    color: #fff;
+    border-color: var(--amber);
+    box-shadow: 0 2px 8px rgba(255, 107, 0, 0.25);
+}
+
+.dash-stab svg {
+    flex-shrink: 0;
+}
+
+/* ── Dashboard overflow fix ────────────────────────────────────── */
+.table-container {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.corp-table {
+    width: 100%;
+    table-layout: auto;
+    word-break: break-word;
+}
+
+/* Prevent KG, forecast tables, and risk tables from overflowing */
+#tab-overview {
+    overflow-x: hidden;
+    max-width: 100%;
+}
+
+#tab-overview .corp-card,
+#tab-overview .dash-grid-6040,
+#tab-overview .dash-grid-333333 {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* KG holder should not exceed viewport */
+.kg-holder {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* KG toolbar dark bg fix for light theme */
+.kg-toolbar {
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+/* KG SVG container light bg */
+.kg-holder {
+    background: var(--bg-page) !important;
+    border: 1px solid var(--border) !important;
+}
+
+/* KG inspector drawer light theme */
+.kg-inspector-drawer {
+    background: var(--bg-card) !important;
+    border-left: 1px solid var(--border) !important;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.08) !important;
+}
