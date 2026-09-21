@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import sys
 import json
@@ -11,17 +11,24 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import pandas as pd
 import numpy as np
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-PUBLIC_DIR = BASE_DIR / "public"
-DATA_DIR = BASE_DIR / "data"
-REVIEW_PATH = DATA_DIR / "review_decisions.json"
-AUDIT_PATH = DATA_DIR / "audit_events.json"
+# BASE_DIR is the repo root (one level up from this app/ directory).
+# Using os.path so paths work identically on Linux (Vercel) and Windows.
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUBLIC_DIR  = os.path.join(BASE_DIR, "public")
+DATA_DIR    = os.path.join(BASE_DIR, "data")
+
+# On Vercel the filesystem is read-only except /tmp.
+# All file WRITES go to /tmp; all file READS still come from DATA_DIR.
+IS_VERCEL    = os.environ.get("VERCEL") == "1"
+WRITABLE_DIR = "/tmp" if IS_VERCEL else DATA_DIR
+REVIEW_PATH  = os.path.join(WRITABLE_DIR, "review_decisions.json")
+AUDIT_PATH   = os.path.join(WRITABLE_DIR, "audit_events.json")
 MAX_REQUEST_BYTES = 64 * 1024
 review_lock = threading.RLock()
-audit_lock = threading.RLock()
+audit_lock  = threading.RLock()
 
-sys.path.insert(0, str(BASE_DIR))
-sys.path.insert(0, str(BASE_DIR / "src"))
+sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 
 try:
     from src.nlp_engine import SafetyClassifierPipeline
@@ -58,7 +65,7 @@ REQUIRED_REPORT_FIELDS = {
     "activity_being_performed",
 }
 MAX_REPORT_FIELD_LENGTH = 2000
-SUBMITTED_REPORTS_METADATA_FILE = os.path.abspath("data/submitted_reports_metadata.json")
+SUBMITTED_REPORTS_METADATA_FILE = os.path.join(WRITABLE_DIR, "submitted_reports_metadata.json")
 
 def load_submitted_reports_metadata():
     if os.path.isfile(SUBMITTED_REPORTS_METADATA_FILE):
@@ -71,11 +78,11 @@ def load_submitted_reports_metadata():
             pass
 
     metadata = {}
-    csv_path = os.path.abspath("data/oil_safety_reports.csv")
+    csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
     if os.path.isfile(csv_path):
         try:
             df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
-            baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
+            baseline_path = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.csv")
             historical_ids = set()
             if os.path.isfile(baseline_path):
                 b_df = pd.read_csv(baseline_path, dtype=str, keep_default_na=False)
@@ -127,15 +134,15 @@ def is_newly_submitted_report(report_id, row=None):
 
 # Initialize AI Pipeline & Pre-compute Dataset Vectors for Similarity Search
 pipeline = SafetyClassifierPipeline()
-pipeline.train(str(DATA_DIR / "oil_safety_reports.csv"))
+pipeline.train(str(os.path.join(DATA_DIR, "oil_safety_reports.csv")))
 
 dataset_df = None
 dataset_vectors = None
 
 def init_dataset_search():
     global dataset_df, dataset_vectors
-    csv_path = DATA_DIR / "oil_safety_reports.csv"
-    if csv_path.exists():
+    csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+    if os.path.exists(csv_path):
         dataset_df = pd.read_csv(csv_path)
         descriptions = dataset_df['description'].fillna("").tolist()
         if pipeline.vectorizer:
@@ -198,7 +205,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         else:
             clean_path = urllib.parse.unquote(req_path.lstrip("/")).replace("/", os.sep)
             if not clean_path or clean_path == "index.html":
-                local_file = PUBLIC_DIR / "index.html"
+                local_file = os.path.join(PUBLIC_DIR, "index.html")
                 mime = "text/html"
             else:
                 local_file = self._resolve_public_file(req_path)
@@ -483,7 +490,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if report["report_type"] not in REPORT_TYPES:
             raise ValueError("Field 'report_type' must be an existing report type.")
 
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if not os.path.isfile(csv_path):
             raise ValueError("Safety report dataset was not found.")
 
@@ -533,7 +540,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 encoding="utf-8",
                 newline="",
                 suffix=".csv",
-                dir=os.path.dirname(csv_path),
+                dir=WRITABLE_DIR,
                 delete=False,
             ) as temp_file:
                 temp_path = temp_file.name
@@ -542,7 +549,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
             if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
                 raise ValueError("Written CSV validation failed.")
-            os.replace(temp_path, csv_path)
+            if not IS_VERCEL:
+                os.replace(temp_path, csv_path)
             temp_path = None
         finally:
             if temp_path and os.path.exists(temp_path):
@@ -604,7 +612,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if report["report_type"] not in REPORT_TYPES:
             raise ValueError("Field 'report_type' must be an existing report type.")
 
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if not os.path.isfile(csv_path):
             raise ValueError("Safety report dataset was not found.")
 
@@ -649,7 +657,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 encoding="utf-8",
                 newline="",
                 suffix=".csv",
-                dir=os.path.dirname(csv_path),
+                dir=WRITABLE_DIR,
                 delete=False,
             ) as temp_file:
                 temp_path = temp_file.name
@@ -658,7 +666,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
             if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
                 raise ValueError("Written CSV validation failed.")
-            os.replace(temp_path, csv_path)
+            if not IS_VERCEL:
+                os.replace(temp_path, csv_path)
             temp_path = None
         finally:
             if temp_path and os.path.exists(temp_path):
@@ -680,7 +689,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if not isinstance(report_id, str) or not re.fullmatch(r"OIL-HSE-\d{4}-\d+", report_id):
             raise ValueError("Invalid report ID format.")
 
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if not os.path.isfile(csv_path):
             raise ValueError("Safety report dataset was not found.")
 
@@ -715,7 +724,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                 encoding="utf-8",
                 newline="",
                 suffix=".csv",
-                dir=os.path.dirname(csv_path),
+                dir=WRITABLE_DIR,
                 delete=False,
             ) as temp_file:
                 temp_path = temp_file.name
@@ -724,7 +733,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             written_df = pd.read_csv(temp_path, dtype=str, keep_default_na=False)
             if list(written_df.columns) != REPORT_COLUMNS or len(written_df) != len(updated_df):
                 raise ValueError("Written CSV validation failed.")
-            os.replace(temp_path, csv_path)
+            if not IS_VERCEL:
+                os.replace(temp_path, csv_path)
             temp_path = None
         finally:
             if temp_path and os.path.exists(temp_path):
@@ -742,11 +752,11 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         }
 
     def serve_csv_download(self):
-        csv_path = DATA_DIR / "oil_safety_reports.csv"
-        if not csv_path.is_file():
-            csv_path = PUBLIC_DIR / "data" / "oil_safety_reports.csv"
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        if not os.path.isfile(csv_path):
+            csv_path = os.path.join(PUBLIC_DIR, "data") / "oil_safety_reports.csv"
 
-        if csv_path.is_file():
+        if os.path.isfile(csv_path):
             with open(csv_path, "rb") as f:
                 content = f.read()
 
@@ -775,8 +785,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(data, indent=2).encode('utf-8'))
 
     def serve_file(self, rel_path, content_type):
-        abs_path = Path(rel_path).resolve()
-        if abs_path.is_file():
+        abs_path = os.path.abspath(rel_path)
+        if os.path.isfile(abs_path):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -789,22 +799,22 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             self.send_error(404, f"File {rel_path} not found at {abs_path}")
 
     def get_reports(self):
-        json_path = DATA_DIR / "oil_safety_reports.json"
-        if json_path.exists():
+        json_path = os.path.join(DATA_DIR, "oil_safety_reports.json")
+        if os.path.exists(json_path):
             with open(json_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         return []
 
     @staticmethod
     def get_health():
-        dataset_path = DATA_DIR / "oil_safety_reports.csv"
+        dataset_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         artifacts = {
-            "tfidf_vectorizer": (BASE_DIR / "models" / "tfidf_vectorizer.pkl").exists(),
-            "sif_classifier": (BASE_DIR / "models" / "sif_classifier.pkl").exists(),
-            "lsr_classifier": (BASE_DIR / "models" / "lsr_classifier.pkl").exists(),
+            "tfidf_vectorizer": os.path.exists(os.path.join(BASE_DIR, "models", "tfidf_vectorizer.pkl")),
+            "sif_classifier": os.path.exists(os.path.join(BASE_DIR, "models", "sif_classifier.pkl")),
+            "lsr_classifier": os.path.exists(os.path.join(BASE_DIR, "models", "lsr_classifier.pkl")),
         }
         dataset_rows = 0
-        if dataset_path.exists():
+        if os.path.exists(dataset_path):
             try:
                 dataset_rows = int(pd.read_csv(dataset_path, usecols=["report_id"]).shape[0])
             except (OSError, ValueError, pd.errors.ParserError):
@@ -812,20 +822,20 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         return {
             "status": "ok" if dataset_rows and all(artifacts.values()) else "degraded",
             "dataset": {
-                "available": dataset_path.exists(),
+                "available": os.path.exists(dataset_path),
                 "rows": dataset_rows,
             },
             "model_artifacts": artifacts,
             "runtime": {
                 "sif_classifier": "hybrid_rule_engine_plus_logistic_regression",
                 "lsr_classifier": "semantic_tfidf_matcher",
-                "review_store_available": REVIEW_PATH.exists(),
-                "audit_store_available": AUDIT_PATH.exists(),
+                "review_store_available": os.path.exists(REVIEW_PATH),
+                "audit_store_available": os.path.exists(AUDIT_PATH),
             },
         }
 
     def get_reviews(self):
-        if not REVIEW_PATH.exists():
+        if not os.path.exists(REVIEW_PATH):
             return []
         try:
             with review_lock, open(REVIEW_PATH, "r", encoding="utf-8") as review_file:
@@ -836,7 +846,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def get_audit_events():
-        if not AUDIT_PATH.exists():
+        if not os.path.exists(AUDIT_PATH):
             return []
         try:
             with audit_lock, open(AUDIT_PATH, "r", encoding="utf-8") as audit_file:
@@ -854,7 +864,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "metadata": metadata if isinstance(metadata, dict) else {},
         }
         try:
-            DATA_DIR.mkdir(exist_ok=True)
+            os.makedirs(WRITABLE_DIR, exist_ok=True)
             with audit_lock:
                 events = SafetyDashboardHandler.get_audit_events()
                 events.append(event)
@@ -923,7 +933,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "final_label": data.get("final_label", data.get("predicted_label", "UNKNOWN")),
             "comment": str(data.get("comment", ""))[:2_000],
         }
-        DATA_DIR.mkdir(exist_ok=True)
+        os.makedirs(WRITABLE_DIR, exist_ok=True)
         with review_lock:
             reviews = self.get_reviews()
             reviews.append(review)
@@ -1048,7 +1058,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "grounded": True,
             "disclaimer": "Answer generated from the current safety dataset and analytics; validate operational decisions with HSE review.",
         }
-        csv_path = "data/oil_safety_reports.csv"
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if os.path.exists(csv_path):
             records = pd.read_csv(csv_path, keep_default_na=False).to_dict(orient="records")
             metadata = load_submitted_reports_metadata()
@@ -1087,7 +1097,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         return []
 
     def get_recurring_precursors(self):
-        csv_path = "data/oil_safety_reports.csv"
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if not os.path.exists(csv_path):
             return {"recurring_precursors": []}
 
@@ -1117,7 +1127,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         return {"recurring_precursors": recurring[:8]}
 
     def get_predictive_risk(self):
-        csv_path = "data/oil_safety_reports.csv"
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
         if not os.path.exists(csv_path):
             return {"site_predictions": []}
 
@@ -1155,8 +1165,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
     # ================================================================
     def run_ask_ai(self, question: str) -> dict:
         """Intent-based NL query → deterministic Pandas aggregation. Zero hallucination."""
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
-        baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        baseline_path = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.csv")
         try:
             df = pd.read_csv(csv_path if os.path.isfile(csv_path) else baseline_path)
         except Exception:
@@ -1278,8 +1288,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
     # ================================================================
     def get_review_queue(self) -> dict:
         """Returns reports flagged for human review: low confidence (40-75%) or unconfirmed barriers."""
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
-        baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        baseline_path = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.csv")
         try:
             df = pd.read_csv(csv_path if os.path.isfile(csv_path) else baseline_path, keep_default_na=False)
         except Exception:
@@ -1332,8 +1342,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if not report_id or action not in ("approve_sif", "reclassify_non_sif"):
             return {"success": False, "error": "Invalid report_id or action."}
 
-        csv_path = os.path.abspath("data/oil_safety_reports.csv")
-        baseline_path = os.path.abspath("public/data/oil_safety_reports.csv")
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        baseline_path = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.csv")
         active_path = csv_path if os.path.isfile(csv_path) else baseline_path
         try:
             df = pd.read_csv(active_path)
@@ -1428,8 +1438,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         return results
 
     def get_knowledge_graph(self):
-        csv_path = DATA_DIR / "oil_safety_reports.csv"
-        if not csv_path.exists():
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        if not os.path.exists(csv_path):
             return {"nodes": [], "links": []}
 
         df = pd.read_csv(csv_path)
@@ -1559,8 +1569,8 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         }
 
     def get_analytics(self):
-        csv_path = DATA_DIR / "oil_safety_reports.csv"
-        if not csv_path.exists():
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        if not os.path.exists(csv_path):
             return {}
 
         df = pd.read_csv(csv_path)

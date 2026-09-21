@@ -1,0 +1,218 @@
+[
+  {
+    "event_id": "AUD-20260920111221214731",
+    "created_at": "2026-09-20T11:12:21.214803+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 161
+    }
+  },
+  {
+    "event_id": "AUD-20260920111238270012",
+    "created_at": "2026-09-20T11:12:38.270076+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 161
+    }
+  },
+  {
+    "event_id": "AUD-20260920111244451545",
+    "created_at": "2026-09-20T11:12:44.451633+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 161
+    }
+  },
+  {
+    "event_id": "AUD-20260920111256807142",
+    "created_at": "2026-09-20T11:12:56.807217+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 331
+    }
+  },
+  {
+    "event_id": "AUD-20260920111352276754",
+    "created_at": "2026-09-20T11:13:52.276816+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 331
+    }
+  },
+  {
+    "event_id": "AUD-20260920111358449502",
+    "created_at": "2026-09-20T11:13:58.449568+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 331
+    }
+  },
+  {
+    "event_id": "AUD-20260920111404997335",
+    "created_at": "2026-09-20T11:14:04.997408+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920113227079988",
+    "created_at": "2026-09-20T11:32:27.080028+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920114558682060",
+    "created_at": "2026-09-20T11:45:58.682134+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 31
+    }
+  },
+  {
+    "event_id": "AUD-20260920114603101869",
+    "created_at": "2026-09-20T11:46:03.101954+00:00",
+    "action": "copilot",
+    "metadata": {
+      "source_types": [
+        "site_ranking"
+      ],
+      "question_length": 39
+    }
+  },
+  {
+    "event_id": "AUD-20260920114824444734",
+    "created_at": "2026-09-20T11:48:24.444831+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920114841050822",
+    "created_at": "2026-09-20T11:48:41.050915+00:00",
+    "action": "simulate",
+    "metadata": {
+      "life_saving_rule": "Line of Fire",
+      "barrier_condition": "FAILED_OR_ABSENT",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920114847106119",
+    "created_at": "2026-09-20T11:48:47.106695+00:00",
+    "action": "human_review",
+    "metadata": {
+      "review_id": "REV-20260920114847101330",
+      "decision": "accepted",
+      "predicted_label": "SIF_POTENTIAL",
+      "final_label": "SIF_POTENTIAL"
+    }
+  },
+  {
+    "event_id": "AUD-20260920114857818081",
+    "created_at": "2026-09-20T11:48:57.818155+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920115156089325",
+    "created_at": "2026-09-20T11:51:56.089495+00:00",
+    "action": "report_quality",
+    "metadata": {
+      "quality": "INCOMPLETE",
+      "missing_fields": [
+        "exposure",
+        "consequence"
+      ],
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920124805175636",
+    "created_at": "2026-09-20T12:48:05.175696+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920133316184619",
+    "created_at": "2026-09-20T13:33:16.184690+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 84
+    }
+  },
+  {
+    "event_id": "AUD-20260920135305806994",
+    "created_at": "2026-09-20T13:53:05.807074+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 188
+    }
+  },
+  {
+    "event_id": "AUD-20260920135305823975",
+    "created_at": "2026-09-20T13:53:05.824060+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "NON_SIF_OBSERVATION",
+      "confidence_band": "LOW",
+      "text_length": 188
+    }
+  },
+  {
+    "event_id": "AUD-20260920141421605007",
+    "created_at": "2026-09-20T14:14:21.605079+00:00",
+    "action": "classify",
+    "metadata": {
+      "classification_label": "SIF_POTENTIAL",
+      "confidence_band": "HIGH",
+      "text_length": 115
+    }
+  },
+  {
+    "event_id": "AUD-20260920141427193477",
+    "created_at": "2026-09-20T14:14:27.193568+00:00",
+    "action": "human_review",
+    "metadata": {
+      "review_id": "REV-20260920141427190302",
+      "decision": "corrected",
+      "predicted_label": "SIF_POTENTIAL",
+      "final_label": "SIF_POTENTIAL"
+    }
+  }
+]

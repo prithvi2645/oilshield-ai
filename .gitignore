@@ -13,9 +13,9 @@ ENV/
 *.log
 *.tmp
 
-# Runtime governance stores
-data/review_decisions.json
-data/audit_events.json
+# Runtime governance stores (kept in repo as empty initial state; writes go to /tmp on Vercel)
+# data/review_decisions.json
+# data/audit_events.json
 
 # OS / IDE metadata
 .DS_Store
