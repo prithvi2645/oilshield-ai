@@ -389,7 +389,8 @@ function renderRiskMatrix(rows) {
 async function fetchReports() {
     try {
         const response = await fetch('/api/reports');
-        masterReports = await response.json();
+        const data = await response.json();
+        masterReports = Array.isArray(data) ? data : (data.reports || []);
         filteredReports = [...masterReports];
         renderMasterTable();
         populateClassifierDropdown();
@@ -532,19 +533,26 @@ function applyTableFilters() {
     const activeBtn = document.querySelector('.filter-btn.active');
     if (!searchInput || !activeBtn) return;
 
-    const searchTerm = searchInput.value.toLowerCase();
-    const activeFilter = activeBtn.getAttribute('data-filter');
+    const searchTerm = (searchInput.value || '').toLowerCase().trim();
+    const activeFilter = activeBtn.getAttribute('data-filter') || 'all';
 
-    filteredReports = masterReports.filter(report => {
-        const matchesSearch = 
-            report.report_id.toLowerCase().includes(searchTerm) ||
-            report.site_location.toLowerCase().includes(searchTerm) ||
-            report.description.toLowerCase().includes(searchTerm) ||
-            report.iogp_life_saving_rule.toLowerCase().includes(searchTerm);
+    filteredReports = (masterReports || []).filter(report => {
+        if (!report) return false;
+        const repId = String(report.report_id || '');
+        const site  = String(report.site_location || '');
+        const desc  = String(report.description || report.report_title || '');
+        const rule  = String(report.iogp_life_saving_rule || '');
+
+        const matchesSearch = !searchTerm ||
+            repId.toLowerCase().includes(searchTerm) ||
+            site.toLowerCase().includes(searchTerm) ||
+            desc.toLowerCase().includes(searchTerm) ||
+            rule.toLowerCase().includes(searchTerm);
 
         let matchesSif = true;
-        if (activeFilter === 'sif') matchesSif = report.sif_potential === 1;
-        if (activeFilter === 'nonsif') matchesSif = report.sif_potential === 0;
+        const sifVal = (report.sif_potential === 1 || String(report.sif_potential) === '1') ? 1 : 0;
+        if (activeFilter === 'sif') matchesSif = (sifVal === 1);
+        if (activeFilter === 'nonsif') matchesSif = (sifVal === 0);
 
         return matchesSearch && matchesSif;
     });

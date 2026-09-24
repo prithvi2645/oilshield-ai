@@ -686,33 +686,6 @@
                     </div>
                 </div>
 
-            <!-- 30-Day Statistical Site SIF Risk Probability Forecast Card -->
-            <div class="corp-card" id="predictiveRiskCard" data-dash-section="risk" style="margin-top: var(--space-lg); margin-bottom: var(--space-lg);">
-                <div class="card-title">
-                    <div>
-                        <h3>30-Day Site SIF Risk Probability Forecast</h3>
-                        <p class="card-subtitle">Statistical SIF risk projection across OIL installations based on historical precursor density and average severity score</p>
-                    </div>
-                    <span class="badge badge-amber">30-Day Machine Forecast</span>
-                </div>
-                <div class="table-container">
-                    <table class="corp-table">
-                        <thead>
-                            <tr>
-                                <th>Installation Site</th>
-                                <th>Report Volume</th>
-                                <th>30-Day Predicted SIF Probability</th>
-                                <th>Risk Exposure Level</th>
-                                <th>Recommended Audit Directive</th>
-                            </tr>
-                        </thead>
-                        <tbody id="predictiveRiskBody">
-                            <!-- Populated by JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
                 <div class="corp-card">
                     <div class="card-title">
                         <div>
@@ -724,6 +697,33 @@
                     <div class="chart-holder">
                         <canvas id="overviewLsrChart"></canvas>
                     </div>
+                </div>
+            </div>
+
+            <!-- 30-Day Statistical Site SIF Risk Probability Forecast Card -->
+            <div class="corp-card" id="predictiveRiskCard" data-dash-section="risk" style="margin-top: var(--space-lg); margin-bottom: var(--space-lg);">
+                <div class="card-title">
+                    <div>
+                        <h3>30-Day Site SIF Risk Probability Forecast</h3>
+                        <p class="card-subtitle">Statistical SIF risk projection across OIL installations based on historical precursor density and average severity score</p>
+                    </div>
+                    <span class="badge badge-amber">30-Day Machine Forecast</span>
+                </div>
+                <div class="table-container" style="overflow-x: auto;">
+                    <table class="corp-table">
+                        <thead>
+                            <tr>
+                                <th style="white-space: nowrap;">Installation Site</th>
+                                <th style="white-space: nowrap;">Report Volume</th>
+                                <th style="white-space: nowrap;">30-Day Predicted SIF Probability</th>
+                                <th style="white-space: nowrap;">Risk Exposure Level</th>
+                                <th style="white-space: nowrap;">Recommended Audit Directive</th>
+                            </tr>
+                        </thead>
+                        <tbody id="predictiveRiskBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

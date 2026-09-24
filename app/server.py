@@ -759,7 +759,10 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         }
 
     def sync_json_dataset(self, df):
-        json_path = os.path.join(DATA_DIR, "oil_safety_reports.json")
+        paths_to_write = [os.path.join(WRITABLE_DIR, "oil_safety_reports.json")]
+        if WRITABLE_DIR != DATA_DIR:
+            paths_to_write.append(os.path.join(DATA_DIR, "oil_safety_reports.json"))
+
         try:
             records = df.to_dict(orient="records")
             for r in records:
@@ -771,8 +774,13 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
                     r["sif_severity_score"] = float(r.get("sif_severity_score", 0.0))
                 except (ValueError, TypeError):
                     r["sif_severity_score"] = 0.0
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(records, f, indent=2)
+            for j_path in paths_to_write:
+                try:
+                    os.makedirs(os.path.dirname(j_path), exist_ok=True)
+                    with open(j_path, "w", encoding="utf-8") as f:
+                        json.dump(records, f, indent=2)
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[WARN] Failed to sync JSON dataset: {e}")
 
@@ -824,10 +832,42 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             self.send_error(404, f"File {rel_path} not found at {abs_path}")
 
     def get_reports(self):
-        json_path = os.path.join(DATA_DIR, "oil_safety_reports.json")
-        if os.path.exists(json_path):
-            with open(json_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+        writable_json = os.path.join(WRITABLE_DIR, "oil_safety_reports.json")
+        data_json = os.path.join(DATA_DIR, "oil_safety_reports.json")
+        public_json = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.json")
+
+        for j_path in [writable_json, data_json, public_json]:
+            if os.path.isfile(j_path):
+                try:
+                    with open(j_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if data and isinstance(data, list) and len(data) > 0:
+                            return data
+                except Exception:
+                    pass
+
+        # Fallback to reading CSV dataset
+        csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
+        writable_csv = os.path.join(WRITABLE_DIR, "oil_safety_reports.csv")
+        baseline_path = os.path.join(PUBLIC_DIR, "data", "oil_safety_reports.csv")
+
+        for c_path in [writable_csv, csv_path, baseline_path]:
+            if os.path.isfile(c_path):
+                try:
+                    df = pd.read_csv(c_path, dtype=str, keep_default_na=False)
+                    records = df.to_dict(orient="records")
+                    for r in records:
+                        try:
+                            r["sif_potential"] = int(float(r.get("sif_potential", 0)))
+                        except Exception:
+                            r["sif_potential"] = 0
+                        try:
+                            r["sif_severity_score"] = float(r.get("sif_severity_score", 0.0))
+                        except Exception:
+                            r["sif_severity_score"] = 0.25
+                    return records
+                except Exception as e:
+                    print(f"Error reading reports CSV at {c_path}: {e}")
         return []
 
     @staticmethod

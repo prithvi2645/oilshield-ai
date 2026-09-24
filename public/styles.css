@@ -4088,12 +4088,24 @@ body.dark-mode .hse-summary-modal {
 .table-container {
     overflow-x: auto;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
 
 .corp-table {
     width: 100%;
+    min-width: 600px;
     table-layout: auto;
-    word-break: break-word;
+    border-collapse: collapse;
+}
+
+.corp-table th {
+    white-space: nowrap;
+    word-break: normal;
+}
+
+.corp-table td {
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 /* Prevent KG, forecast tables, and risk tables from overflowing */
