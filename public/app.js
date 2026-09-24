@@ -36,13 +36,9 @@ function initRoleControl() {
     const storedRole = sessionStorage.getItem('oil_hsse_user_role');
     const modal = document.getElementById('roleModalOverlay');
     
-    if (!storedRole) {
-        if (modal) modal.style.display = 'flex';
-    } else {
-        currentRole = storedRole;
-        if (modal) modal.style.display = 'none';
-        applyRoleAccess(currentRole);
-    }
+    currentRole = storedRole || 'hse_manager';
+    if (modal) modal.style.display = 'none';
+    applyRoleAccess(currentRole);
 
     // Role modal selection buttons
     document.querySelectorAll('.role-card-btn').forEach(btn => {
@@ -118,28 +114,37 @@ function applyRoleAccess(role) {
 }
 
 function setupTabNavigation() {
-    document.querySelectorAll('.nav-item, .tab-btn').forEach(btn => {
+    document.querySelectorAll('.nav-item, .tab-btn, [data-tab], [data-target]').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const targetTab = e.currentTarget.getAttribute('data-tab');
-            switchTab(targetTab);
+            const targetTab = e.currentTarget.getAttribute('data-tab') || e.currentTarget.getAttribute('data-target');
+            if (targetTab && targetTab.startsWith('tab-')) {
+                e.preventDefault();
+                switchTab(targetTab);
+            }
         });
     });
 }
 
-function switchTab(targetTabId) {
-    document.querySelectorAll('.nav-item, .tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => {
-        c.classList.remove('active');
-        c.style.display = 'none';
+window.switchTab = function(targetTabId) {
+    if (!targetTabId) return;
+
+    document.querySelectorAll('.nav-item, .tab-btn, [data-tab]').forEach(b => {
+        if (b.getAttribute('data-tab') === targetTabId || b.getAttribute('data-target') === targetTabId) {
+            b.classList.add('active');
+        } else {
+            b.classList.remove('active');
+        }
     });
 
-    document.querySelectorAll(`[data-tab="${targetTabId}"]`).forEach(btn => btn.classList.add('active'));
-
-    const tabContent = document.getElementById(targetTabId);
-    if (tabContent) {
-        tabContent.classList.add('active');
-        tabContent.style.display = 'block';
-    }
+    document.querySelectorAll('.tab-content').forEach(c => {
+        if (c.id === targetTabId) {
+            c.classList.add('active');
+            c.style.display = 'block';
+        } else {
+            c.classList.remove('active');
+            c.style.display = 'none';
+        }
+    });
 
     // Specific tab triggers
     if (targetTabId === 'tab-review-queue') {
@@ -164,25 +169,28 @@ function switchTab(targetTabId) {
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+};
 
 function setupHomeModuleClicks() {
     // Hero Buttons
     const heroStartBtn = document.getElementById('heroStartBtn');
     if (heroStartBtn) {
-        heroStartBtn.addEventListener('click', () => switchTab('tab-classifier'));
+        heroStartBtn.addEventListener('click', (e) => { e.preventDefault(); switchTab('tab-classifier'); });
     }
 
     const heroDensityBtn = document.getElementById('heroDensityBtn');
     if (heroDensityBtn) {
-        heroDensityBtn.addEventListener('click', () => switchTab('tab-density'));
+        heroDensityBtn.addEventListener('click', (e) => { e.preventDefault(); switchTab('tab-density'); });
     }
 
     // Module Cards & Bento Cards
-    document.querySelectorAll('.module-card, .bento-card').forEach(card => {
+    document.querySelectorAll('.module-card, .bento-card, [data-target]').forEach(card => {
         card.addEventListener('click', (e) => {
             const target = e.currentTarget.getAttribute('data-target');
-            if (target) switchTab(target);
+            if (target && target.startsWith('tab-')) {
+                e.preventDefault();
+                switchTab(target);
+            }
         });
     });
 
@@ -190,6 +198,7 @@ function setupHomeModuleClicks() {
     document.querySelectorAll('.bento-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             switchTab('tab-classifier');
         });
     });

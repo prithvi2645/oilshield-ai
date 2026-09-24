@@ -20,8 +20,9 @@
     <!-- ============================================================
          ROLE-BASED ACCESS CONTROL & LOGIN AUTHENTICATION MODAL
     ============================================================ -->
-    <div class="role-modal-overlay" id="roleModalOverlay">
-        <div class="role-modal" style="max-width: 520px;">
+    <div class="role-modal-overlay" id="roleModalOverlay" style="display: none; align-items: center; justify-content: center; z-index: 10000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+        <div class="role-modal" style="max-width: 520px; position: relative;">
+            <button type="button" onclick="closeLoginModal()" style="position: absolute; right: 16px; top: 16px; background: none; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" title="Close">&times;</button>
             <div class="role-modal-header">
                 <div class="oil-emblem" style="margin: 0 auto 12px; width: 44px; height: 44px; font-size: 16px;">OIL</div>
                 <h3>OilShield AI — Enterprise Login</h3>
