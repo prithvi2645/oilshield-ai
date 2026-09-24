@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -18,34 +18,55 @@
 <body>
 
     <!-- ============================================================
-         ROLE-BASED ACCESS CONTROL MODAL (RBAC)
+         ROLE-BASED ACCESS CONTROL & LOGIN AUTHENTICATION MODAL
     ============================================================ -->
     <div class="role-modal-overlay" id="roleModalOverlay">
-        <div class="role-modal">
+        <div class="role-modal" style="max-width: 520px;">
             <div class="role-modal-header">
                 <div class="oil-emblem" style="margin: 0 auto 12px; width: 44px; height: 44px; font-size: 16px;">OIL</div>
-                <h3>Select Access Role</h3>
-                <p>Enterprise Role-Based Access Control (RBAC) Scoping Layer</p>
+                <h3>OilShield AI — Enterprise Login</h3>
+                <p>Role-Based Access Control (RBAC) & Authentication Layer</p>
             </div>
-            <div class="role-options-grid">
-                <button class="role-card-btn active" data-role="hse_manager">
-                    <div class="role-title">HSE Manager</div>
-                    <div class="role-desc">Full enterprise access: Overview, Dashboard, Classifier, Site Risk, Compliance, Reports &amp; Knowledge Graph</div>
+            <form id="rbacLoginForm" onsubmit="handleRbacLogin(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <label class="field-label" style="font-size: 11px; margin-bottom: 6px; display: block; font-weight: 700;">Select Target Role:</label>
+                    <div class="role-options-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button type="button" class="role-card-btn active" data-role="hse_manager">
+                            <div class="role-title">HSE Manager</div>
+                            <div class="role-desc">Full Enterprise Access</div>
+                        </button>
+                        <button type="button" class="role-card-btn" data-role="site_manager">
+                            <div class="role-title">Site Manager</div>
+                            <div class="role-desc">Operational Scope</div>
+                        </button>
+                        <button type="button" class="role-card-btn" data-role="supervisor">
+                            <div class="role-title">Field Inspector</div>
+                            <div class="role-desc">Triage & Reporting</div>
+                        </button>
+                        <button type="button" class="role-card-btn" data-role="analyst">
+                            <div class="role-title">Safety Analyst</div>
+                            <div class="role-desc">Read-Only Analytics</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 6px;">
+                    <label class="field-label" style="font-size: 11px; font-weight: 700;">User Account / Email:</label>
+                    <input type="text" id="loginUsernameInput" class="corp-input" value="officer@oilindia.in" required style="width: 100%;">
+                </div>
+
+                <div>
+                    <label class="field-label" style="font-size: 11px; font-weight: 700; display: flex; justify-content: space-between;">
+                        <span>Password:</span>
+                        <span style="color: var(--amber, #f59e0b); font-size: 10px;">Dummy password: <code>password123</code></span>
+                    </label>
+                    <input type="password" id="loginPasswordInput" class="corp-input" value="password123" required placeholder="Enter password (e.g. password123)" style="width: 100%;">
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="confirmRoleBtn" style="width: 100%; margin-top: 10px; font-weight: 700; padding: 10px;">
+                    <span>Authenticate &amp; Access Dashboard</span>
                 </button>
-                <button class="role-card-btn" data-role="site_manager">
-                    <div class="role-title">Site Manager</div>
-                    <div class="role-desc">Operational scope: Overview, Dashboard, Classifier, Reports (Knowledge Graph restricted)</div>
-                </button>
-                <button class="role-card-btn" data-role="supervisor">
-                    <div class="role-title">Field Supervisor</div>
-                    <div class="role-desc">Field scope: Incident Classifier &amp; Reports Database</div>
-                </button>
-                <button class="role-card-btn" data-role="analyst">
-                    <div class="role-title">Safety Analyst</div>
-                    <div class="role-desc">Read-only scope: Overview &amp; Analytics Dashboard (Classifier restricted)</div>
-                </button>
-            </div>
-            <button class="btn btn-primary" id="confirmRoleBtn" style="width: 100%; margin-top: 16px;">Continue as Selected Role</button>
+            </form>
         </div>
     </div>
 
@@ -98,23 +119,27 @@
                 </button>
             </nav>
 
-                        <div class="header-utilities">
-                <!-- Single Unified Header Dropdown -->
+            <div class="header-utilities">
+                <!-- Header Active Role & Switch Button -->
                 <div class="unified-header-dropdown-wrap" style="position: relative;">
                     <button class="btn btn-secondary btn-sm unified-header-btn" id="unifiedHeaderMenuBtn" onclick="toggleUnifiedHeaderMenu(event)" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; border-color: var(--amber, #ff6b00); color: var(--amber, #ff6b00); background: rgba(255, 107, 0, 0.08); padding: 6px 14px; border-radius: 8px; cursor: pointer;">
                         <span class="pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-                        <span id="activeRoleHeaderLabel">Role: HSE Manager</span>
+                        <span id="activeRoleHeaderLabel">Role: HSE Manager (Active)</span>
                         <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 12px; height: 12px;"><polyline points="6 9 12 15 18 9"/></svg>
                     </button>
                     
-                    <div class="unified-header-menu" id="unifiedHeaderMenu" style="display: none; position: absolute; right: 0; top: 115%; width: 310px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.10); z-index: 9999; padding: 14px; font-size: 13px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);">Switch Active Access Role</div>
-                        <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;">
-                            <button class="menu-role-opt active" data-role="hse_manager" onclick="selectUnifiedRole('hse_manager')">HSE Manager (Full Access)</button>
-                            <button class="menu-role-opt" data-role="site_manager" onclick="selectUnifiedRole('site_manager')">Site Manager (Operational)</button>
-                            <button class="menu-role-opt" data-role="supervisor" onclick="selectUnifiedRole('supervisor')">Field Supervisor (Triage)</button>
-                            <button class="menu-role-opt" data-role="analyst" onclick="selectUnifiedRole('analyst')">Safety Analyst (Read-Only)</button>
+                    <div class="unified-header-menu" id="unifiedHeaderMenu" style="display: none; position: absolute; right: 0; top: 115%; width: 290px; background: var(--bg-card, #1e293b); border: 1px solid var(--border-strong, #334155); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); z-index: 9999; padding: 14px; font-size: 13px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);">Active Access Role</div>
+                        
+                        <div style="padding: 10px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; margin-bottom: 12px; text-align: center;">
+                            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; display: block;">Currently Active</span>
+                            <strong id="dropdownActiveRoleTitle" style="font-size: 14px; color: var(--amber, #f59e0b);">HSE Manager</strong>
                         </div>
+
+                        <button class="btn btn-primary btn-sm" onclick="openLoginModal()" style="width: 100%; font-weight: 700; margin-bottom: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                            <span>Switch Role / Re-Authenticate</span>
+                        </button>
                         
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);">Executive Actions &amp; Reports</div>
                         <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -1197,7 +1222,9 @@
                                 <th>Type</th>
                                 <th>Observation</th>
                                 <th>Classification</th>
+                                <th>Risk Level (%)</th>
                                 <th>IOGP Rule</th>
+                                <th style="text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="masterExplorerBody">
@@ -1392,6 +1419,113 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         EDIT SAFETY REPORT MODAL
+    ============================================================ -->
+    <div class="role-modal-overlay" id="editReportModalOverlay" style="display: none; align-items: center; justify-content: center; z-index: 10000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+        <div class="role-modal" style="max-width: 680px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 24px; border-radius: 12px; background: var(--bg-card, #1e293b); border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--text-primary, #f8fafc);">Edit Safety Incident Report</h3>
+                    <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-muted);" id="editReportModalSubhead">Update report details and trigger automatic AI re-analysis</p>
+                </div>
+                <button type="button" onclick="closeEditReportModal()" style="background: none; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;">&times;</button>
+            </div>
+
+            <form id="editReportModalForm" onsubmit="submitEditReportForm(event)" style="display: flex; flex-direction: column; gap: 14px;">
+                <input type="hidden" id="editReportId">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Incident Date:</label>
+                        <input type="date" id="editReportDate" class="corp-input" required style="width: 100%;">
+                    </div>
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Installation / Site:</label>
+                        <select id="editReportSite" class="corp-input" required style="width: 100%;">
+                            <option value="Baghjan Field #5">Baghjan Field #5</option>
+                            <option value="Duliajan GGS Station">Duliajan GGS Station</option>
+                            <option value="Moran OCS Station">Moran OCS Station</option>
+                            <option value="Digboi Refinery Area">Digboi Refinery Area</option>
+                            <option value="Makum Oil Field">Makum Oil Field</option>
+                            <option value="Jaisalmer Gas Field">Jaisalmer Gas Field</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Department:</label>
+                        <select id="editReportDept" class="corp-input" required style="width: 100%;">
+                            <option value="Workover & Operations">Workover & Operations</option>
+                            <option value="Production Oil & Gas">Production Oil & Gas</option>
+                            <option value="Mechanical Maintenance">Mechanical Maintenance</option>
+                            <option value="Pipeline & Logistics">Pipeline & Logistics</option>
+                            <option value="HSE & Electrical Safety">HSE & Electrical Safety</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Observation Type:</label>
+                        <select id="editReportType" class="corp-input" required style="width: 100%;">
+                            <option value="Unsafe Condition">Unsafe Condition</option>
+                            <option value="Unsafe Act">Unsafe Act</option>
+                            <option value="Near Miss">Near Miss</option>
+                            <option value="Incident Report">Incident Report</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="field-label" style="font-size: 11px;">Observation Title:</label>
+                    <input type="text" id="editReportTitle" class="corp-input" required style="width: 100%;">
+                </div>
+
+                <div>
+                    <label class="field-label" style="font-size: 11px;">Detailed Observation Narrative:</label>
+                    <textarea id="editReportDescription" rows="4" class="corp-input" required style="width: 100%; font-size: 13px;"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Activity Being Performed:</label>
+                        <input type="text" id="editReportActivity" class="corp-input" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label class="field-label" style="font-size: 11px;">Immediate Action Taken:</label>
+                        <input type="text" id="editReportAction" class="corp-input" style="width: 100%;">
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 14px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditReportModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="editModalSubmitBtn" style="font-weight: 700;">
+                        <span>Save &amp; Update Report</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         DELETE CONFIRMATION MODAL
+    ============================================================ -->
+    <div class="role-modal-overlay" id="deleteReportModalOverlay" style="display: none; align-items: center; justify-content: center; z-index: 10000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+        <div class="role-modal" style="max-width: 440px; width: 90%; padding: 24px; border-radius: 12px; background: var(--bg-card, #1e293b); border: 1px solid var(--border);">
+            <div style="text-align: center; margin-bottom: 16px;">
+                <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); color: #ef4444; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+                    <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--text-primary, #f8fafc);">Confirm Report Deletion</h3>
+                <p style="margin: 6px 0 0; font-size: 13px; color: var(--text-muted);" id="deleteReportModalText">Are you sure you want to permanently delete this report?</p>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteReportModal()" style="flex: 1;">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmDeleteReportBtn" style="flex: 1; background: #ef4444; border-color: #ef4444; font-weight: 700;">Delete Report</button>
+            </div>
         </div>
     </div>
 

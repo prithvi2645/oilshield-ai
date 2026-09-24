@@ -80,14 +80,46 @@ class SafetyClassifierPipeline:
         if not text:
             return {"language": "en", "language_label": "English (Standard Domain)", "normalized_text": text}
 
+        text_lower = text.lower()
+
+        # Check for Eastern Nagari Script (Bengali & Assamese Unicode: U+0980 to U+09FF)
+        has_bengali_assamese_script = any('\u0980' <= char <= '\u09ff' for char in text)
         # Check for Devanagari Unicode script (U+0900 to U+097F)
         has_devanagari = any('\u0900' <= char <= '\u097f' for char in text)
 
-        # Common Hinglish safety terms mapping to standard domain English
-        hinglish_map = {
+        # Assamese specific characters: ৰ (\u09f0), ৱ (\u09f1)
+        has_assamese_char = '\u09f0' in text or '\u09f1' in text
+
+        # Multilingual terms mapping to standard domain English
+        multilingual_map = {
+            # Assamese & Bengali Script / Transliterated
+            "বিপদ": "hazard / risk",
+            "নিৰাপত্তা": "safety",
+            "নিরাপত্তা": "safety",
+            "আগুন": "fire",
+            "গাৰী": "vehicle",
+            "গাড়ী": "vehicle",
+            "পাইপ": "pipe / line",
+            "লিক": "leakage",
+            "তেল": "oil / hydrocarbon",
+            "কাম": "work / operation",
+            "দূৰ্ঘটনা": "incident / accident",
+            "দুর্ঘটনা": "incident / accident",
+            "বিপদজনক": "hazardous",
+            "অসম": "assam asset",
+            "bipod": "hazard / risk",
+            "nirapotta": "safety",
+            "nirapotta": "safety",
+            "agun": "fire",
+            "gari": "vehicle",
+            "paip": "pipe / line",
+            "leaking": "leakage",
+            "tel": "oil / hydrocarbon",
+            "kam": "work / operation",
+            "durghotona": "incident",
+            # Hinglish & Hindi terms
             "suraksha": "safety",
             "khatra": "hazard / risk",
-            "paip": "pipe / line",
             "pankha": "fan / ventilation",
             "aag": "fire",
             "hawa": "gas / air",
@@ -97,24 +129,51 @@ class SafetyClassifierPipeline:
             "belt": "harness / belt",
             "pehna": "wearing",
             "kapa": "severed / cut",
-            "tel": "oil / hydrocarbon",
             "loto": "lockout tagout",
-            "dhyan": "attention / observation"
+            "dhyan": "attention / observation",
+            "hogaya": "occurred",
+            "chahiye": "required",
+            "jarurat": "requirement",
+            "khabar": "alert / notice"
         }
 
-        text_lower = text.lower()
-        has_hinglish = any(word in text_lower for word in hinglish_map.keys())
+        has_regional_words = any(re.search(r'\b' + re.escape(w) + r'\b', text_lower) for w in multilingual_map.keys())
 
-        if has_devanagari or has_hinglish:
-            lang_code = "hi" if has_devanagari else "mixed"
-            lang_label = "Hindi / Hinglish Detected — Auto-Normalized"
+        if has_assamese_char:
+            lang_code = "as"
+            lang_label = "Assamese Detected (অসমীয়া) — Auto-Normalized"
+        elif has_bengali_assamese_script:
+            # Distinguish Assamese vs Bengali based on keywords if needed
+            if "নিৰাপত্তা" in text or "দূৰ্ঘটনা" in text or "গাৰী" in text or "অসম" in text:
+                lang_code = "as"
+                lang_label = "Assamese Detected (অসমীয়া) — Auto-Normalized"
+            else:
+                lang_code = "bn"
+                lang_label = "Bengali Detected (বাংলা) — Auto-Normalized"
+        elif has_devanagari:
+            lang_code = "hi"
+            lang_label = "Hindi / Devanagari Detected — Auto-Normalized"
+        elif has_regional_words:
+            # Check if Assamese/Bengali transliterated or Hinglish
+            if any(w in text_lower for w in ["bipod", "nirapotta", "durghotona", "tel porise"]):
+                lang_code = "as_bn_roman"
+                lang_label = "Assamese / Bengali (Transliterated) Detected — Auto-Normalized"
+            else:
+                lang_code = "hinglish"
+                lang_label = "Mixed Hinglish Detected — Auto-Normalized"
         else:
             lang_code = "en"
             lang_label = "English (Standard Domain)"
 
+        # Normalize text by substituting regional safety keywords with standard domain English
+        normalized_text = text
+        for term, replacement in multilingual_map.items():
+            normalized_text = re.sub(r'\b' + re.escape(term) + r'\b', replacement, normalized_text, flags=re.IGNORECASE)
+
         return {
             "language": lang_code,
-            "language_label": lang_label
+            "language_label": lang_label,
+            "normalized_text": normalized_text
         }
 
     def anonymize_text(self, text: str) -> str:
@@ -183,38 +242,13 @@ class SafetyClassifierPipeline:
 
     def detect_and_translate_multilingual(self, text: str):
         if not text:
-            return {"language": "en", "translated_text": text}
+            return {"language": "en", "language_label": "English (Standard Domain)", "translated_text": text}
 
-        # Regional Language Lexicon (Assamese, Hindi, Bengali, Kannada)
-        assamese_terms = ["duliajan", "digboi", "moran", "baghjan", "bojo", "aag", "saap", "haat", "tel", "ghor"]
-        kannada_terms = ["niru", "beeli", "kaaya", "bina", "kelasa", "gadi"]
-        hindi_terms = ["khatra", "suraksha", "paip", "pankha", "aag", "hawa", "gadi", "bina", "pehna", "loto"]
-
-        text_lower = text.lower()
-        is_assamese = any(w in text_lower for w in assamese_terms)
-        is_kannada = any(w in text_lower for w in kannada_terms)
-        is_hindi = any(w in text_lower for w in hindi_terms)
-
-        if is_assamese:
-            lang = "as"
-            lang_label = "Assamese (OIL Assam Operations)"
-        elif is_kannada:
-            lang = "kn"
-            lang_label = "Kannada (KG Basin / Southern Asset)"
-        elif is_hindi:
-            lang = "hi"
-            lang_label = "Hindi / Hinglish"
-        else:
-            lang = "en"
-            lang_label = "English (Standard)"
-
-        # Normalize Hinglish/Regional terms into English
-        normalized, _ = self.domain_tokenizer.normalize(text)
-
+        lang_info = self.detect_language(text)
         return {
-            "language": lang,
-            "language_label": lang_label,
-            "translated_text": normalized
+            "language": lang_info["language"],
+            "language_label": lang_info["language_label"],
+            "translated_text": lang_info["normalized_text"]
         }
 
     def predict(self, text: str):

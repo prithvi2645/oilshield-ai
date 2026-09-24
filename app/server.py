@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import sys
 import json
@@ -154,11 +154,15 @@ init_dataset_search()
 
 class SafetyDashboardHandler(SimpleHTTPRequestHandler):
     def _resolve_public_file(self, request_path):
-        clean_path = urllib.parse.unquote(request_path.lstrip("/"))
-        candidate = (PUBLIC_DIR / clean_path).resolve()
-        if candidate != PUBLIC_DIR and PUBLIC_DIR not in candidate.parents:
+        clean_path = urllib.parse.unquote(request_path.lstrip("/")).replace("/", os.sep)
+        pub_path = Path(PUBLIC_DIR).resolve()
+        try:
+            candidate = (pub_path / clean_path).resolve()
+            if candidate != pub_path and pub_path not in candidate.parents:
+                return None
+            return candidate
+        except Exception:
             return None
-        return candidate
 
     def _read_json_body(self):
         try:
@@ -556,6 +560,9 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
 
+        # Sync JSON dataset file
+        self.sync_json_dataset(updated_df)
+
         metadata = load_submitted_reports_metadata()
         metadata[new_id] = {
             "report_id": new_id,
@@ -626,22 +633,20 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         row_idx = matching_indices[0]
         existing_row = current_df.iloc[row_idx].to_dict()
 
-        if not is_newly_submitted_report(report_id, existing_row):
-            raise PermissionError(f"Historical report '{report_id}' is read-only and cannot be edited.")
-
+        # Enable editing for all reports
         # Run AI re-analysis on the corrected description using the EXISTING pipeline
         analysis = pipeline.predict(report["description"])
         if not isinstance(analysis, dict) or analysis.get("error"):
             raise ValueError(analysis.get("error", "AI analysis did not return a valid result."))
 
         report["report_id"] = report_id
-        report["sif_potential"] = str(int(analysis.get("sif_potential", 0)))
-        report["sif_severity_score"] = str(float(analysis.get("sif_confidence", 0.0)))
+        report["sif_potential"] = int(analysis.get("sif_potential", 0))
+        report["sif_severity_score"] = float(analysis.get("sif_confidence", 0.0))
         report["iogp_life_saving_rule"] = str(analysis.get("iogp_life_saving_rule", "None / Housekeeping"))
 
         updated_df = current_df.copy()
         for col in REPORT_COLUMNS:
-            updated_df.at[row_idx, col] = report[col]
+            updated_df.at[row_idx, col] = str(report[col])
 
         if len(updated_df) != len(current_df):
             raise ValueError("Report row-count validation failed.")
@@ -673,6 +678,9 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
 
+        # Sync JSON dataset file
+        self.sync_json_dataset(updated_df)
+
         metadata = load_submitted_reports_metadata()
         if report_id in metadata:
             metadata[report_id]["updated_at"] = pd.Timestamp.now().isoformat()
@@ -701,10 +709,6 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         if not matching_indices:
             raise LookupError(f"Report '{report_id}' was not found.")
         row_idx = matching_indices[0]
-        existing_row = current_df.iloc[row_idx].to_dict()
-
-        if not is_newly_submitted_report(report_id, existing_row):
-            raise PermissionError(f"Historical report '{report_id}' cannot be deleted.")
 
         updated_df = current_df.drop(index=row_idx).reset_index(drop=True)
 
@@ -740,6 +744,9 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
 
+        # Sync JSON dataset file
+        self.sync_json_dataset(updated_df)
+
         metadata = load_submitted_reports_metadata()
         if report_id in metadata:
             del metadata[report_id]
@@ -750,6 +757,24 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
             "message": "Report deleted successfully.",
             "report_id": report_id
         }
+
+    def sync_json_dataset(self, df):
+        json_path = os.path.join(DATA_DIR, "oil_safety_reports.json")
+        try:
+            records = df.to_dict(orient="records")
+            for r in records:
+                try:
+                    r["sif_potential"] = int(float(r.get("sif_potential", 0)))
+                except (ValueError, TypeError):
+                    r["sif_potential"] = 0
+                try:
+                    r["sif_severity_score"] = float(r.get("sif_severity_score", 0.0))
+                except (ValueError, TypeError):
+                    r["sif_severity_score"] = 0.0
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(records, f, indent=2)
+        except Exception as e:
+            print(f"[WARN] Failed to sync JSON dataset: {e}")
 
     def serve_csv_download(self):
         csv_path = os.path.join(DATA_DIR, "oil_safety_reports.csv")
@@ -1761,7 +1786,7 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
 def run_server(port=None):
     if port is None:
         port = int(os.environ.get("PORT", 8081))
-    PUBLIC_DIR.mkdir(exist_ok=True)
+    os.makedirs(PUBLIC_DIR, exist_ok=True)
     server_address = ('', port)
     httpd = ThreadingHTTPServer(server_address, SafetyDashboardHandler)
     print(f"[SUCCESS] Oil India Safety AI Dashboard Server running at http://localhost:{port}")

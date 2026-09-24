@@ -32,8 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// FEATURE 20  —  ROLE-BASED ACCESS CONTROL (RBAC)
-// ============================================================
 function initRoleControl() {
     const storedRole = sessionStorage.getItem('oil_hsse_user_role');
     const modal = document.getElementById('roleModalOverlay');
@@ -53,114 +51,23 @@ function initRoleControl() {
             e.currentTarget.classList.add('active');
         });
     });
-
-    const confirmBtn = document.getElementById('confirmRoleBtn');
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', () => {
-            const activeRoleBtn = document.querySelector('.role-card-btn.active');
-            if (activeRoleBtn) {
-                currentRole = activeRoleBtn.getAttribute('data-role');
-                sessionStorage.setItem('oil_hsse_user_role', currentRole);
-                if (modal) modal.style.display = 'none';
-                applyRoleAccess(currentRole);
-            }
-        });
-    }
-
-    // Header role badge click to switch
-    const headerRoleBadge = document.getElementById('headerRoleBadge');
-    if (headerRoleBadge) {
-        headerRoleBadge.addEventListener('click', () => {
-            if (modal) modal.style.display = 'flex';
-        });
-    }
-}
-
-// ============================================================
-// HERO CAROUSEL SLIDESHOW
-// ============================================================
-function initHeroCarousel() {
-    const carousel = document.getElementById('heroCarousel');
-    if (!carousel) return;
-
-    const slides = carousel.querySelectorAll('.hero-slide');
-    const dots = carousel.querySelectorAll('.c-dot');
-    const locationText = document.getElementById('heroLocationText');
-
-    const locations = [
-        'Oil India Limited \u00b7 Baghjan Field #5',
-        'Oil India Limited \u00b7 Duliajan GGS Station',
-        'Oil India Limited \u00b7 Digboi Refinery Area',
-        'Oil India Limited \u00b7 Moran OCS Station'
-    ];
-
-    let currentIndex = 0;
-    let timer = null;
-
-    function goToSlide(index) {
-        currentIndex = (index + slides.length) % slides.length;
-        slides.forEach((slide, i) => {
-            if (i === currentIndex) {
-                slide.classList.add('active');
-            } else {
-                slide.classList.remove('active');
-            }
-        });
-        dots.forEach((dot, i) => {
-            if (i === currentIndex) {
-                dot.classList.add('active');
-            } else {
-                dot.classList.remove('active');
-            }
-        });
-        if (locationText && locations[currentIndex]) {
-            locationText.textContent = locations[currentIndex];
-        }
-    }
-
-    function startTimer() {
-        stopTimer();
-        timer = setInterval(() => {
-            goToSlide(currentIndex + 1);
-        }, 2500);
-    }
-
-    function stopTimer() {
-        if (timer) {
-            clearInterval(timer);
-            timer = null;
-        }
-    }
-
-    dots.forEach((dot) => {
-        dot.addEventListener('click', (e) => {
-            const slideIdx = parseInt(e.target.getAttribute('data-slide'), 10);
-            if (!isNaN(slideIdx)) {
-                goToSlide(slideIdx);
-                startTimer();
-            }
-        });
-    });
-
-    carousel.addEventListener('mouseenter', stopTimer);
-    carousel.addEventListener('mouseleave', startTimer);
-
-    startTimer();
 }
 
 function applyRoleAccess(role) {
     const roleLabels = {
-        'hse_manager': 'Role: HSE Manager',
-        'site_manager': 'Role: Site Manager',
-        'supervisor': 'Role: Field Supervisor',
-        'analyst': 'Role: Safety Analyst'
+        'hse_manager': 'HSE Manager',
+        'site_manager': 'Site Manager',
+        'supervisor': 'Field Inspector',
+        'analyst': 'Safety Analyst'
     };
 
-    const roleLabelEl = document.getElementById('roleLabel');
-    if (roleLabelEl) roleLabelEl.textContent = roleLabels[role] || 'Role: HSE Manager';
+    const displayRole = roleLabels[role] || 'HSE Manager';
 
-    const headerRoleSelect = document.getElementById('headerRoleSelect');
-    if (headerRoleSelect) headerRoleSelect.value = role;
+    const headerLabel = document.getElementById('activeRoleHeaderLabel');
+    if (headerLabel) headerLabel.textContent = `Role: ${displayRole} (Active)`;
+
+    const dropdownTitle = document.getElementById('dropdownActiveRoleTitle');
+    if (dropdownTitle) dropdownTitle.textContent = displayRole;
 
     const kgCard = document.getElementById('knowledgeGraphCard');
     const analyzeBtn = document.getElementById('analyzeBtn');
@@ -171,14 +78,22 @@ function applyRoleAccess(role) {
         if (kgCard) kgCard.style.display = 'block';
         if (analyzeBtn) analyzeBtn.disabled = false;
     } else if (role === 'site_manager') {
-        document.querySelectorAll('.nav-item').forEach(el => el.style.display = 'inline-flex');
+        // Operational scope: Show Overview, Dashboard, Classifier, Site Risk, Reports
+        document.querySelectorAll('.nav-item').forEach(el => {
+            const tab = el.getAttribute('data-tab');
+            if (['tab-review-queue'].includes(tab)) {
+                el.style.display = 'none';
+            } else {
+                el.style.display = 'inline-flex';
+            }
+        });
         if (kgCard) kgCard.style.display = 'none';
         if (analyzeBtn) analyzeBtn.disabled = false;
     } else if (role === 'supervisor') {
-        // Hide Dashboard, Site Risk, Compliance tabs
+        // Field scope: Classifier & Reports
         document.querySelectorAll('.nav-item').forEach(el => {
             const tab = el.getAttribute('data-tab');
-            if (['tab-overview', 'tab-density', 'tab-iogp'].includes(tab)) {
+            if (['tab-overview', 'tab-density', 'tab-iogp', 'tab-review-queue'].includes(tab)) {
                 el.style.display = 'none';
             } else {
                 el.style.display = 'inline-flex';
@@ -188,8 +103,15 @@ function applyRoleAccess(role) {
         if (analyzeBtn) analyzeBtn.disabled = false;
         switchTab('tab-classifier');
     } else if (role === 'analyst') {
-        // Read-only analyst: hide classifier action button
-        document.querySelectorAll('.nav-item').forEach(el => el.style.display = 'inline-flex');
+        // Read-only analyst: Overview, Dashboard, Reports, Ask AI
+        document.querySelectorAll('.nav-item').forEach(el => {
+            const tab = el.getAttribute('data-tab');
+            if (['tab-review-queue'].includes(tab)) {
+                el.style.display = 'none';
+            } else {
+                el.style.display = 'inline-flex';
+            }
+        });
         if (kgCard) kgCard.style.display = 'block';
         if (analyzeBtn) analyzeBtn.disabled = true;
     }
@@ -626,16 +548,37 @@ function renderMasterTable() {
     tbody.innerHTML = '';
 
     if (filteredReports.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">No matching safety observations found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: #64748b; padding: 20px;">No matching safety observations found.</td></tr>`;
         return;
     }
 
     filteredReports.slice(0, 100).forEach(report => {
         const tr = document.createElement('tr');
         
-        const sifStatus = report.sif_potential === 1 
+        const sifStatus = report.sif_potential === 1 || String(report.sif_potential) === '1'
             ? `<span class="pill-sif">SIF Potential</span>`
             : `<span class="pill-nonsif">Non-SIF</span>`;
+
+        let rawScore = report.sif_severity_score;
+        if (rawScore === undefined || rawScore === null || rawScore === '' || isNaN(rawScore)) {
+            rawScore = (report.sif_potential === 1 || String(report.sif_potential) === '1') ? 0.85 : 0.25;
+        }
+        let scoreVal = parseFloat(rawScore);
+        let riskPct = Math.round(scoreVal > 1.0 ? scoreVal : scoreVal * 100);
+        riskPct = Math.min(100, Math.max(0, riskPct));
+
+        const riskClass = riskPct >= 70 ? 'critical' : riskPct >= 40 ? 'high' : riskPct >= 20 ? 'moderate' : 'low';
+        const riskBadge = `<span class="risk-pill ${riskClass}" style="font-weight: 800; padding: 4px 10px;">${riskPct}%</span>`;
+
+        const obsText = report.report_title || report.description || '';
+        const obsSnippet = obsText.length > 70 ? obsText.substring(0, 68) + '...' : obsText;
+
+        const actionsHtml = `
+            <div style="display: flex; gap: 6px; justify-content: center;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditReportModal('${report.report_id}')" style="padding: 3px 8px; font-size: 11px; font-weight: 700;">Edit</button>
+                <button class="btn btn-primary btn-sm" onclick="confirmDeleteReport('${report.report_id}')" style="padding: 3px 8px; font-size: 11px; font-weight: 700; background: #ef4444; border-color: #ef4444;">Delete</button>
+            </div>
+        `;
 
         tr.innerHTML = `
             <td><strong>${escapeHtml(report.report_id)}</strong></td>
@@ -643,9 +586,11 @@ function renderMasterTable() {
             <td>${escapeHtml(report.site_location)}</td>
             <td>${escapeHtml(report.department)}</td>
             <td>${escapeHtml(report.report_type)}</td>
-            <td>${escapeHtml(report.description.substring(0, 85))}...</td>
+            <td>${escapeHtml(obsSnippet)}</td>
             <td>${sifStatus}</td>
+            <td>${riskBadge}</td>
             <td>${escapeHtml(report.iogp_life_saving_rule)}</td>
+            <td style="text-align: center;">${actionsHtml}</td>
         `;
 
         tbody.appendChild(tr);
@@ -2461,4 +2406,200 @@ window.switchDashSection = function(section) {
 // Keep backward compat if anything still calls the old function
 window.toggleDashboardViewMode = function(mode) {
     switchDashSection(mode === 'summary' ? 'summary' : 'all');
+};
+
+// ============================================================
+// RBAC LOGIN & SWITCH ROLE MODAL HANDLERS
+// ============================================================
+window.openLoginModal = function() {
+    const headerMenu = document.getElementById('unifiedHeaderMenu');
+    if (headerMenu) headerMenu.style.display = 'none';
+    const modal = document.getElementById('roleModalOverlay');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.handleRbacLogin = function(e) {
+    if (e) e.preventDefault();
+    const activeBtn = document.querySelector('.role-card-btn.active');
+    const selectedRole = activeBtn ? activeBtn.getAttribute('data-role') : 'hse_manager';
+    const pwdInput = document.getElementById('loginPasswordInput');
+    const password = pwdInput ? pwdInput.value.trim() : '';
+
+    if (!password) {
+        showToast('Please enter password to authenticate', 'error');
+        return;
+    }
+
+    currentRole = selectedRole;
+    sessionStorage.setItem('oil_hsse_user_role', currentRole);
+
+    const modal = document.getElementById('roleModalOverlay');
+    if (modal) modal.style.display = 'none';
+
+    applyRoleAccess(currentRole);
+
+    const roleNameDisplay = {
+        'hse_manager': 'HSE Manager',
+        'site_manager': 'Site Manager',
+        'supervisor': 'Field Inspector',
+        'analyst': 'Safety Analyst'
+    }[currentRole] || currentRole;
+
+    showToast(`Successfully authenticated as ${roleNameDisplay}! Access granted.`, 'success');
+};
+
+// ============================================================
+// REPORT EDIT & DELETE MODAL HANDLERS
+// ============================================================
+window.openNewReportModal = function() {
+    const modal = document.getElementById('newReportModalOverlay');
+    if (modal) {
+        modal.style.display = 'flex';
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('newReportDate');
+        if (dateInput && !dateInput.value) dateInput.value = today;
+    }
+};
+
+window.closeNewReportModal = function() {
+    const modal = document.getElementById('newReportModalOverlay');
+    if (modal) modal.style.display = 'none';
+};
+
+window.submitNewReportForm = async function(e) {
+    if (e) e.preventDefault();
+    const payload = {
+        date: document.getElementById('newReportDate').value,
+        site_location: document.getElementById('newReportSite').value,
+        department: document.getElementById('newReportDept').value,
+        report_type: document.getElementById('newReportType').value,
+        report_title: document.getElementById('newReportTitle').value,
+        description: document.getElementById('newReportDescription').value,
+        activity_being_performed: document.getElementById('newReportActivity').value || 'Field Operations',
+        immediate_corrective_action: document.getElementById('newReportAction').value || 'Stop Work Authority executed',
+    };
+
+    const submitBtn = document.getElementById('modalSubmitBtn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
+
+    try {
+        const response = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const resData = await response.json();
+        if (!response.ok) throw new Error(resData.error || 'Failed to submit report');
+
+        closeNewReportModal();
+        showToast(`Report ${resData.report.report_id} registered successfully!`, 'success');
+        await fetchReports();
+        await fetchAnalytics();
+    } catch (err) {
+        showToast(`Error creating report: ${err.message}`, 'error');
+    } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit & Register Report'; }
+    }
+};
+
+window.openEditReportModal = function(reportId) {
+    const report = masterReports.find(r => String(r.report_id) === String(reportId));
+    if (!report) {
+        showToast('Report not found', 'error');
+        return;
+    }
+
+    document.getElementById('editReportId').value = report.report_id;
+    document.getElementById('editReportDate').value = report.date || '';
+    document.getElementById('editReportSite').value = report.site_location || 'Baghjan Field #5';
+    document.getElementById('editReportDept').value = report.department || 'Workover & Operations';
+    document.getElementById('editReportType').value = report.report_type || 'Unsafe Condition';
+    document.getElementById('editReportTitle').value = report.report_title || '';
+    document.getElementById('editReportDescription').value = report.description || '';
+    document.getElementById('editReportActivity').value = report.activity_being_performed || '';
+    document.getElementById('editReportAction').value = report.immediate_corrective_action || '';
+
+    document.getElementById('editReportModalSubhead').textContent = `Editing Report ID: ${report.report_id}`;
+    document.getElementById('editReportModalOverlay').style.display = 'flex';
+};
+
+window.closeEditReportModal = function() {
+    const modal = document.getElementById('editReportModalOverlay');
+    if (modal) modal.style.display = 'none';
+};
+
+window.submitEditReportForm = async function(e) {
+    if (e) e.preventDefault();
+    const reportId = document.getElementById('editReportId').value;
+    const payload = {
+        date: document.getElementById('editReportDate').value,
+        site_location: document.getElementById('editReportSite').value,
+        department: document.getElementById('editReportDept').value,
+        report_type: document.getElementById('editReportType').value,
+        report_title: document.getElementById('editReportTitle').value,
+        description: document.getElementById('editReportDescription').value,
+        activity_being_performed: document.getElementById('editReportActivity').value,
+        immediate_corrective_action: document.getElementById('editReportAction').value,
+    };
+
+    const submitBtn = document.getElementById('editModalSubmitBtn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+
+    try {
+        const response = await fetch(`/api/reports/${reportId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const resData = await response.json();
+        if (!response.ok) throw new Error(resData.error || 'Failed to update report');
+
+        closeEditReportModal();
+        showToast(`Report ${reportId} updated successfully! AI re-analysis complete.`, 'success');
+        await fetchReports();
+        await fetchAnalytics();
+    } catch (err) {
+        showToast(`Error updating report: ${err.message}`, 'error');
+    } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save & Update Report'; }
+    }
+};
+
+let pendingDeleteId = null;
+
+window.confirmDeleteReport = function(reportId) {
+    pendingDeleteId = reportId;
+    const textEl = document.getElementById('deleteReportModalText');
+    if (textEl) textEl.textContent = `Are you sure you want to permanently delete report ${reportId}?`;
+    const btn = document.getElementById('confirmDeleteReportBtn');
+    if (btn) btn.onclick = () => executeDeleteReport(reportId);
+    document.getElementById('deleteReportModalOverlay').style.display = 'flex';
+};
+
+window.closeDeleteReportModal = function() {
+    document.getElementById('deleteReportModalOverlay').style.display = 'none';
+    pendingDeleteId = null;
+};
+
+window.executeDeleteReport = async function(reportId) {
+    const btn = document.getElementById('confirmDeleteReportBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+
+    try {
+        const response = await fetch(`/api/reports/${reportId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const resData = await response.json();
+        if (!response.ok) throw new Error(resData.error || 'Failed to delete report');
+
+        closeDeleteReportModal();
+        showToast(`Report ${reportId} deleted successfully!`, 'success');
+        await fetchReports();
+        await fetchAnalytics();
+    } catch (err) {
+        showToast(`Error deleting report: ${err.message}`, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete Report'; }
+    }
 };
