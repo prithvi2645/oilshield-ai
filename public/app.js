@@ -19,6 +19,53 @@ function escapeHtml(value) {
 
 let currentRole = 'hse_manager';
 
+function switchTab(targetTabId) {
+    if (!targetTabId) return;
+
+    document.querySelectorAll('.nav-item, .tab-btn, [data-tab]').forEach(b => {
+        if (b.getAttribute('data-tab') === targetTabId || b.getAttribute('data-target') === targetTabId) {
+            b.classList.add('active');
+        } else {
+            b.classList.remove('active');
+        }
+    });
+
+    document.querySelectorAll('.tab-content').forEach(c => {
+        if (c.id === targetTabId) {
+            c.classList.add('active');
+            c.style.display = 'block';
+        } else {
+            c.classList.remove('active');
+            c.style.display = 'none';
+        }
+    });
+
+    // Specific tab triggers
+    if (targetTabId === 'tab-review-queue') {
+        if (typeof window.fetchReviewQueue === 'function') window.fetchReviewQueue();
+    } else if (targetTabId === 'tab-ask-ai') {
+        const input = document.getElementById('askAiInput');
+        if (input) setTimeout(() => input.focus(), 100);
+    }
+
+    // Re-render charts when tab is switched (ensures correct responsive width)
+    if (analyticsData) {
+        if (targetTabId === 'tab-overview') {
+            renderOverviewCharts(analyticsData);
+            renderBarrierChart(analyticsData.barrier_distribution || {});
+            renderSeverityDonutChart(analyticsData.severity_buckets || {});
+            renderMonthlyTrend(analyticsData.monthly_trend || [], analyticsData.forecast_data || [], analyticsData.forecast_summary);
+        } else if (targetTabId === 'tab-density') {
+            renderDensityDetailChart(analyticsData.site_rankings || []);
+        } else if (targetTabId === 'tab-iogp') {
+            renderIogpDetailChart(analyticsData.lsr_distribution || {});
+        }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.switchTab = switchTab;
+
 document.addEventListener('DOMContentLoaded', () => {
     initRoleControl();
     initHeroCarousel();
@@ -124,52 +171,6 @@ function setupTabNavigation() {
         });
     });
 }
-
-window.switchTab = function(targetTabId) {
-    if (!targetTabId) return;
-
-    document.querySelectorAll('.nav-item, .tab-btn, [data-tab]').forEach(b => {
-        if (b.getAttribute('data-tab') === targetTabId || b.getAttribute('data-target') === targetTabId) {
-            b.classList.add('active');
-        } else {
-            b.classList.remove('active');
-        }
-    });
-
-    document.querySelectorAll('.tab-content').forEach(c => {
-        if (c.id === targetTabId) {
-            c.classList.add('active');
-            c.style.display = 'block';
-        } else {
-            c.classList.remove('active');
-            c.style.display = 'none';
-        }
-    });
-
-    // Specific tab triggers
-    if (targetTabId === 'tab-review-queue') {
-        if (typeof window.fetchReviewQueue === 'function') window.fetchReviewQueue();
-    } else if (targetTabId === 'tab-ask-ai') {
-        const input = document.getElementById('askAiInput');
-        if (input) setTimeout(() => input.focus(), 100);
-    }
-
-    // Re-render charts when tab is switched (ensures correct responsive width)
-    if (analyticsData) {
-        if (targetTabId === 'tab-overview') {
-            renderOverviewCharts(analyticsData);
-            renderBarrierChart(analyticsData.barrier_distribution || {});
-            renderSeverityDonutChart(analyticsData.severity_buckets || {});
-            renderMonthlyTrend(analyticsData.monthly_trend || [], analyticsData.forecast_data || [], analyticsData.forecast_summary);
-        } else if (targetTabId === 'tab-density') {
-            renderDensityDetailChart(analyticsData.site_rankings || []);
-        } else if (targetTabId === 'tab-iogp') {
-            renderIogpDetailChart(analyticsData.lsr_distribution || {});
-        }
-    }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
 
 function setupHomeModuleClicks() {
     // Hero Buttons
