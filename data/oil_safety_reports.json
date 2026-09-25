@@ -8010,8 +8010,8 @@
     "sif_potential": 1,
     "sif_severity_score": 0.94,
     "iogp_life_saving_rule": "Line of Fire",
-    "barrier_failure_type": "",
-    "precursor_pattern": "",
+    "barrier_failure_type": "Equipment Integrity / Maintenance",
+    "precursor_pattern": "High-Pressure Line Surge & Equipment Vibration",
     "activity_being_performed": "Well testing & pressure monitoring",
     "immediate_corrective_action": ""
   },
@@ -8026,8 +8026,8 @@
     "sif_potential": 1,
     "sif_severity_score": 0.94,
     "iogp_life_saving_rule": "Line of Fire",
-    "barrier_failure_type": "",
-    "precursor_pattern": "",
+    "barrier_failure_type": "Equipment Integrity / Maintenance",
+    "precursor_pattern": "High-Pressure Line Surge & Equipment Vibration",
     "activity_being_performed": "Workover operations & high pressure line maintenance",
     "immediate_corrective_action": ""
   },
@@ -8042,8 +8042,8 @@
     "sif_potential": 1,
     "sif_severity_score": 0.94,
     "iogp_life_saving_rule": "Line of Fire",
-    "barrier_failure_type": "",
-    "precursor_pattern": "",
+    "barrier_failure_type": "Equipment Integrity / Maintenance",
+    "precursor_pattern": "High-Pressure Line Surge & Equipment Vibration",
     "activity_being_performed": "Workover operations & high pressure line maintenance",
     "immediate_corrective_action": ""
   },
@@ -8058,8 +8058,8 @@
     "sif_potential": 1,
     "sif_severity_score": 0.94,
     "iogp_life_saving_rule": "Line of Fire",
-    "barrier_failure_type": "",
-    "precursor_pattern": "",
+    "barrier_failure_type": "Equipment Integrity / Maintenance",
+    "precursor_pattern": "High-Pressure Line Surge & Equipment Vibration",
     "activity_being_performed": "Chiksan pressure line rigging & test",
     "immediate_corrective_action": ""
   }

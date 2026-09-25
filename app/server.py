@@ -527,6 +527,16 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         report["sif_potential"] = str(int(analysis.get("sif_potential", 0)))
         report["sif_severity_score"] = str(float(analysis.get("sif_confidence", 0.0)))
         report["iogp_life_saving_rule"] = str(analysis.get("iogp_life_saving_rule", "None / Housekeeping"))
+        if not report.get("barrier_failure_type"):
+            report["barrier_failure_type"] = (
+                analysis.get("barrier_failure_type")
+                or (analysis.get("barrier_condition") if analysis.get("barrier_condition") not in (None, "UNKNOWN", "") else "Equipment Integrity / Maintenance")
+            )
+        if not report.get("precursor_pattern"):
+            report["precursor_pattern"] = (
+                analysis.get("precursor_pattern")
+                or (analysis.get("audit_rationale") if analysis.get("audit_rationale") else f"Operational precursor in {report.get('department', 'field')}")
+            )
 
         new_row = pd.DataFrame([[report[column] for column in REPORT_COLUMNS]], columns=REPORT_COLUMNS)
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
@@ -643,6 +653,18 @@ class SafetyDashboardHandler(SimpleHTTPRequestHandler):
         report["sif_potential"] = int(analysis.get("sif_potential", 0))
         report["sif_severity_score"] = float(analysis.get("sif_confidence", 0.0))
         report["iogp_life_saving_rule"] = str(analysis.get("iogp_life_saving_rule", "None / Housekeeping"))
+        if not report.get("barrier_failure_type"):
+            report["barrier_failure_type"] = (
+                analysis.get("barrier_failure_type")
+                or existing_row.get("barrier_failure_type")
+                or (analysis.get("barrier_condition") if analysis.get("barrier_condition") not in (None, "UNKNOWN", "") else "Equipment Integrity / Maintenance")
+            )
+        if not report.get("precursor_pattern"):
+            report["precursor_pattern"] = (
+                analysis.get("precursor_pattern")
+                or existing_row.get("precursor_pattern")
+                or (analysis.get("audit_rationale") if analysis.get("audit_rationale") else f"Operational precursor in {report.get('department', 'field')}")
+            )
 
         updated_df = current_df.copy()
         for col in REPORT_COLUMNS:

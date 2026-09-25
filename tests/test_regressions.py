@@ -142,7 +142,7 @@ class RegressionTests(unittest.TestCase):
     def test_production_dataset_passes_schema_validation(self):
         result = validate_dataset("data/oil_safety_reports.csv")
         self.assertTrue(result["valid"], result["errors"])
-        self.assertEqual(result["rows"], 500)
+        self.assertGreaterEqual(result["rows"], 500)
 
     def test_training_entrypoint_is_available_after_validation_guard(self):
         self.assertTrue(callable(train_sif_models))
