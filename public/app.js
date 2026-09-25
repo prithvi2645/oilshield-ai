@@ -68,7 +68,6 @@ window.switchTab = switchTab;
 
 document.addEventListener('DOMContentLoaded', () => {
     initRoleControl();
-    initHeroCarousel();
     setupTabNavigation();
     setupHomeModuleClicks();
     setupEventListeners();
